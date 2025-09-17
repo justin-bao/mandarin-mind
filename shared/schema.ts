@@ -1,18 +1,62 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, timestamp, integer } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const users = pgTable("users", {
+// Conversations table
+export const conversations = pgTable("conversations", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  username: text("username").notNull().unique(),
-  password: text("password").notNull(),
+  topic: text("topic"),
+  topicZh: text("topic_zh"),
+  difficulty: text("difficulty").$type<'Beginner' | 'Intermediate' | 'Advanced'>(),
+  duration: integer("duration").default(0), // in seconds
+  messageCount: integer("message_count").default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertUserSchema = createInsertSchema(users).pick({
-  username: true,
-  password: true,
+// Messages table
+export const messages = pgTable("messages", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  conversationId: varchar("conversation_id").notNull().references(() => conversations.id, { onDelete: "cascade" }),
+  text: text("text").notNull(),
+  pinyin: text("pinyin"),
+  translation: text("translation"),
+  isUser: integer("is_user").notNull().$type<0 | 1>(), // 0 = AI, 1 = user
+  audioUrl: text("audio_url"),
+  createdAt: timestamp("created_at").defaultNow(),
 });
 
-export type InsertUser = z.infer<typeof insertUserSchema>;
-export type User = typeof users.$inferSelect;
+// Practice words table
+export const practiceWords = pgTable("practice_words", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  chinese: text("chinese").notNull(),
+  pinyin: text("pinyin"),
+  english: text("english").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Schema types
+export const insertConversationSchema = createInsertSchema(conversations).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertMessageSchema = createInsertSchema(messages).omit({
+  id: true,
+  createdAt: true,
+});
+
+export const insertPracticeWordSchema = createInsertSchema(practiceWords).omit({
+  id: true,
+  createdAt: true,
+});
+
+export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type InsertMessage = z.infer<typeof insertMessageSchema>;
+export type InsertPracticeWord = z.infer<typeof insertPracticeWordSchema>;
+
+export type Conversation = typeof conversations.$inferSelect;
+export type Message = typeof messages.$inferSelect;
+export type PracticeWord = typeof practiceWords.$inferSelect;
