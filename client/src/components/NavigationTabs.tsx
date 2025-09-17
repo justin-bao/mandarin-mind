@@ -1,0 +1,101 @@
+import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { 
+  MessageCircle, 
+  GraduationCap, 
+  History, 
+  Settings,
+  Mic
+} from "lucide-react";
+
+interface NavigationTab {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  badge?: number;
+}
+
+interface NavigationTabsProps {
+  activeTab: string;
+  onTabChange: (tabId: string) => void;
+  className?: string;
+}
+
+const tabs: NavigationTab[] = [
+  {
+    id: 'conversation',
+    label: 'Conversation',
+    icon: <MessageCircle className="h-5 w-5" />
+  },
+  {
+    id: 'practice',
+    label: 'Practice',
+    icon: <GraduationCap className="h-5 w-5" />
+  },
+  {
+    id: 'history',
+    label: 'History', 
+    icon: <History className="h-5 w-5" />,
+    badge: 3
+  },
+  {
+    id: 'settings',
+    label: 'Settings',
+    icon: <Settings className="h-5 w-5" />
+  }
+];
+
+export default function NavigationTabs({ activeTab, onTabChange, className }: NavigationTabsProps) {
+  const [showVoiceButton, setShowVoiceButton] = useState(true);
+
+  return (
+    <div className={`relative ${className}`}>
+      {/* Bottom Navigation */}
+      <div className="bg-card border-t border-border">
+        <div className="flex items-center justify-around px-4 py-2">
+          {tabs.map((tab) => (
+            <Button
+              key={tab.id}
+              variant={activeTab === tab.id ? "secondary" : "ghost"}
+              size="sm"
+              onClick={() => {
+                onTabChange(tab.id);
+                console.log('Tab changed to:', tab.label);
+              }}
+              className="flex-col h-auto py-2 px-3 relative"
+              data-testid={`tab-${tab.id}`}
+            >
+              <div className="relative">
+                {tab.icon}
+                {tab.badge && (
+                  <Badge 
+                    className="absolute -top-2 -right-2 h-5 w-5 rounded-full p-0 text-xs flex items-center justify-center"
+                    data-testid={`badge-${tab.id}`}
+                  >
+                    {tab.badge}
+                  </Badge>
+                )}
+              </div>
+              <span className="text-xs mt-1">{tab.label}</span>
+            </Button>
+          ))}
+        </div>
+      </div>
+      
+      {/* Floating Voice Button */}
+      {showVoiceButton && activeTab === 'conversation' && (
+        <Button
+          size="icon"
+          className="absolute bottom-20 right-4 h-14 w-14 rounded-full shadow-lg z-10"
+          onClick={() => {
+            console.log('Voice button pressed');
+          }}
+          data-testid="button-floating-voice"
+        >
+          <Mic className="h-6 w-6" />
+        </Button>
+      )}
+    </div>
+  );
+}
