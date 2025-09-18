@@ -40,6 +40,11 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
       setIsRecording(true);
       setRecordingDuration(0);
       
+      // Force a re-render check
+      setTimeout(() => {
+        console.log('State check after update - isRecording should be true:', isRecording);
+      }, 100);
+      
       // Start duration counter
       intervalRef.current = setInterval(() => {
         setRecordingDuration(prev => prev + 1);
