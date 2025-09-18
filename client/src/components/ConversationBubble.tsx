@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Volume2, Loader2 } from "lucide-react";
+import { playAudio } from "@/lib/api";
 
 interface ConversationBubbleProps {
   text: string;
@@ -9,6 +10,7 @@ interface ConversationBubbleProps {
   translation: string;
   isUser: boolean;
   timestamp: string;
+  audioUrl?: string;
 }
 
 export default function ConversationBubble({
@@ -16,16 +18,27 @@ export default function ConversationBubble({
   pinyin,
   translation,
   isUser,
-  timestamp
+  timestamp,
+  audioUrl
 }: ConversationBubbleProps) {
   const [showTranslation, setShowTranslation] = useState(false);
   const [isPlaying, setIsPlaying] = useState(false);
 
-  const handlePlayAudio = () => {
-    console.log('Playing audio for:', text);
-    setIsPlaying(true);
-    // Simulate audio playback
-    setTimeout(() => setIsPlaying(false), 2000);
+  const handlePlayAudio = async () => {
+    if (!audioUrl) {
+      console.log('No audio available for:', text);
+      return;
+    }
+
+    try {
+      console.log('Playing audio for:', text);
+      setIsPlaying(true);
+      await playAudio(audioUrl);
+      setIsPlaying(false);
+    } catch (error) {
+      console.error('Failed to play audio:', error);
+      setIsPlaying(false);
+    }
   };
 
   const handleTextTap = () => {

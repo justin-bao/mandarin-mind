@@ -143,6 +143,7 @@ export default function ConversationInterface({
               translation={message.translation || ''}
               isUser={message.isUser === 1}
               timestamp={new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              audioUrl={message.audioUrl || ''}
             />
           ))}
           
