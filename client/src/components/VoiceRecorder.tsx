@@ -6,11 +6,23 @@ import { startAudioRecording, stopAudioRecording, playAudio } from "@/lib/api";
 
 interface VoiceRecorderProps {
   onRecordingComplete?: (audioBlob: Blob) => void;
+  onRecordingStart?: () => void;
+  onRecordingStop?: () => void;
+  externalIsRecording?: boolean;
   className?: string;
 }
 
-export default function VoiceRecorder({ onRecordingComplete, className }: VoiceRecorderProps) {
+export default function VoiceRecorder({ 
+  onRecordingComplete, 
+  onRecordingStart,
+  onRecordingStop,
+  externalIsRecording,
+  className 
+}: VoiceRecorderProps) {
   const [isRecording, setIsRecording] = useState(false);
+  
+  // Use external state if provided, otherwise use internal state
+  const actualIsRecording = externalIsRecording !== undefined ? externalIsRecording : isRecording;
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasRecording, setHasRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
@@ -38,12 +50,8 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
       
       console.log('Setting isRecording to true');
       setIsRecording(true);
+      onRecordingStart?.();
       setRecordingDuration(0);
-      
-      // Force a re-render check
-      setTimeout(() => {
-        console.log('State check after update - isRecording should be true:', isRecording);
-      }, 100);
       
       // Start duration counter
       intervalRef.current = setInterval(() => {
@@ -71,6 +79,7 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
       const audioBlob = await stopAudioRecording(mediaRecorderRef.current, chunksRef.current);
       
       setIsRecording(false);
+      onRecordingStop?.();
       setHasRecording(true);
       recordingBlobRef.current = audioBlob;
       
@@ -113,11 +122,11 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
         <div className="relative">
           <Button
             size="icon"
-            variant={isRecording ? "destructive" : "default"}
+            variant={actualIsRecording ? "destructive" : "default"}
             className="h-16 w-16 rounded-full"
             onClick={() => {
-              console.log('Voice button pressed, isRecording:', isRecording);
-              if (isRecording) {
+              console.log('Voice button pressed, actualIsRecording:', actualIsRecording);
+              if (actualIsRecording) {
                 console.log('Calling stopRecording');
                 stopRecording();
               } else {
@@ -127,30 +136,30 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
             }}
             data-testid="button-record-voice"
           >
-            {isRecording ? (
+            {actualIsRecording ? (
               <Square className="h-8 w-8" />
             ) : (
               <Mic className="h-8 w-8" />
             )}
           </Button>
           
-          {isRecording && (
+          {actualIsRecording && (
             <div className="absolute -inset-2 rounded-full border-2 border-destructive animate-pulse" />
           )}
         </div>
         
         <div className="text-center">
           <div className="text-sm font-medium" data-testid="text-recording-status">
-            {isRecording ? 'Recording...' : hasRecording ? 'Recording ready' : 'Tap to record'}
+            {actualIsRecording ? 'Recording...' : hasRecording ? 'Recording ready' : 'Tap to record'}
           </div>
-          {(isRecording || hasRecording) && (
+          {(actualIsRecording || hasRecording) && (
             <div className="text-xs text-muted-foreground mt-1" data-testid="text-recording-duration">
               {formatDuration(recordingDuration)}
             </div>
           )}
         </div>
         
-        {hasRecording && !isRecording && (
+        {hasRecording && !actualIsRecording && (
           <div className="flex gap-2">
             <Button
               variant="outline"

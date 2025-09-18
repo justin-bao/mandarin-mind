@@ -25,6 +25,7 @@ interface ConversationInterfaceProps {
 export default function ConversationInterface({ topic, onBack }: ConversationInterfaceProps) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
+  const [isRecording, setIsRecording] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -75,7 +76,16 @@ export default function ConversationInterface({ topic, onBack }: ConversationInt
 
   const handleRecordingComplete = (audioBlob: Blob) => {
     if (!conversationId) return;
+    setIsRecording(false);
     sendAudioMutation.mutate(audioBlob);
+  };
+
+  const handleRecordingStart = () => {
+    setIsRecording(true);
+  };
+
+  const handleRecordingStop = () => {
+    setIsRecording(false);
   };
 
   return (
@@ -143,10 +153,18 @@ export default function ConversationInterface({ topic, onBack }: ConversationInt
       <Card className="p-4 rounded-none border-x-0 border-b-0">
         {showVoiceRecorder ? (
           <div className="space-y-4">
-            <VoiceRecorder onRecordingComplete={handleRecordingComplete} />
+            <VoiceRecorder 
+              onRecordingComplete={handleRecordingComplete}
+              onRecordingStart={handleRecordingStart}
+              onRecordingStop={handleRecordingStop}
+              externalIsRecording={isRecording}
+            />
             <Button
               variant="outline"
-              onClick={() => setShowVoiceRecorder(false)}
+              onClick={() => {
+                setShowVoiceRecorder(false);
+                setIsRecording(false);
+              }}
               className="w-full"
               data-testid="button-cancel-recording"
             >
