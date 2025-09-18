@@ -17,12 +17,21 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordingBlobRef = useRef<Blob | null>(null);
   const intervalRef = useRef<NodeJS.Timeout | null>(null);
+  const chunksRef = useRef<BlobPart[]>([]);
 
   const startRecording = async () => {
     try {
       console.log('Starting recording...');
       const mediaRecorder = await startAudioRecording();
       mediaRecorderRef.current = mediaRecorder;
+      chunksRef.current = [];
+      
+      // Set up data collection
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunksRef.current.push(e.data);
+        }
+      };
       
       setIsRecording(true);
       setRecordingDuration(0);
@@ -40,11 +49,14 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
   };
 
   const stopRecording = async () => {
-    if (!mediaRecorderRef.current) return;
+    if (!mediaRecorderRef.current) {
+      console.log('No media recorder to stop');
+      return;
+    }
     
     try {
       console.log('Stopping recording...');
-      const audioBlob = await stopAudioRecording(mediaRecorderRef.current);
+      const audioBlob = await stopAudioRecording(mediaRecorderRef.current, chunksRef.current);
       
       setIsRecording(false);
       setHasRecording(true);
@@ -57,6 +69,7 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
       onRecordingComplete?.(audioBlob);
     } catch (error) {
       console.error('Failed to stop recording:', error);
+      setIsRecording(false);
     }
   };
 
@@ -135,6 +148,7 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
                 setHasRecording(false);
                 setRecordingDuration(0);
                 recordingBlobRef.current = null;
+                chunksRef.current = [];
                 console.log('Recording cleared');
               }}
               data-testid="button-clear-recording"

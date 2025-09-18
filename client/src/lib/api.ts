@@ -14,16 +14,8 @@ export const startAudioRecording = (): Promise<MediaRecorder> => {
   });
 };
 
-export const stopAudioRecording = (mediaRecorder: MediaRecorder): Promise<Blob> => {
+export const stopAudioRecording = (mediaRecorder: MediaRecorder, chunks: BlobPart[]): Promise<Blob> => {
   return new Promise((resolve) => {
-    const chunks: BlobPart[] = [];
-    
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data.size > 0) {
-        chunks.push(e.data);
-      }
-    };
-    
     mediaRecorder.onstop = () => {
       const audioBlob = new Blob(chunks, { type: 'audio/webm;codecs=opus' });
       resolve(audioBlob);
