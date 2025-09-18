@@ -30,53 +30,6 @@ interface ConversationHistoryProps {
   onConversationSelect?: (conversation: Conversation) => void;
 }
 
-// Todo: Remove mock data
-const mockConversations: Conversation[] = [
-  {
-    id: '1',
-    topic: 'Dining Experience',
-    topicZh: '用餐体验',
-    date: '2024-01-15',
-    duration: '12:30',
-    messageCount: 24,
-    difficulty: 'Beginner',
-    preview: 'Discussing favorite restaurants and ordering food',
-    previewZh: '讨论最喜欢的餐厅和点菜'
-  },
-  {
-    id: '2', 
-    topic: 'Travel Planning',
-    topicZh: '旅行计划',
-    date: '2024-01-14',
-    duration: '08:45',
-    messageCount: 18,
-    difficulty: 'Intermediate',
-    preview: 'Planning a trip to Beijing, discussing transportation',
-    previewZh: '计划去北京的旅行，讨论交通'
-  },
-  {
-    id: '3',
-    topic: 'Business Meeting',
-    topicZh: '商务会议',
-    date: '2024-01-12',
-    duration: '15:20',
-    messageCount: 32,
-    difficulty: 'Advanced',
-    preview: 'Negotiating contract terms and project timelines',
-    previewZh: '协商合同条款和项目时间表'
-  },
-  {
-    id: '4',
-    topic: 'Family Life',
-    topicZh: '家庭生活',
-    date: '2024-01-10',
-    duration: '06:15',
-    messageCount: 15,
-    difficulty: 'Beginner',
-    preview: 'Talking about family members and weekend activities',
-    previewZh: '谈论家庭成员和周末活动'
-  }
-];
 
 export default function ConversationHistory({ onConversationSelect }: ConversationHistoryProps) {
   const [searchTerm, setSearchTerm] = useState('');

@@ -5,8 +5,7 @@ import {
   MessageCircle, 
   GraduationCap, 
   History, 
-  Settings,
-  Mic
+  Settings
 } from "lucide-react";
 
 interface NavigationTab {
@@ -36,8 +35,7 @@ const tabs: NavigationTab[] = [
   {
     id: 'history',
     label: 'History', 
-    icon: <History className="h-5 w-5" />,
-    badge: 3
+    icon: <History className="h-5 w-5" />
   },
   {
     id: 'settings',
@@ -47,7 +45,6 @@ const tabs: NavigationTab[] = [
 ];
 
 export default function NavigationTabs({ activeTab, onTabChange, className }: NavigationTabsProps) {
-  const [showVoiceButton, setShowVoiceButton] = useState(true);
 
   return (
     <div className={`relative ${className}`}>
@@ -82,20 +79,6 @@ export default function NavigationTabs({ activeTab, onTabChange, className }: Na
           ))}
         </div>
       </div>
-      
-      {/* Floating Voice Button */}
-      {showVoiceButton && activeTab === 'conversation' && (
-        <Button
-          size="icon"
-          className="absolute bottom-20 right-4 h-14 w-14 rounded-full shadow-lg z-10"
-          onClick={() => {
-            console.log('Voice button pressed');
-          }}
-          data-testid="button-floating-voice"
-        >
-          <Mic className="h-6 w-6" />
-        </Button>
-      )}
     </div>
   );
 }

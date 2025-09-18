@@ -27,6 +27,7 @@ function Router() {
 function MainApp() {
   const [activeTab, setActiveTab] = useState('conversation');
   const [selectedTopic, setSelectedTopic] = useState<any>(null);
+  const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [conversationMode, setConversationMode] = useState<'topics' | 'practice' | 'freeform' | 'active'>('topics');
   const [practiceWords, setPracticeWords] = useState<any[]>([]);
   const [isRecording, setIsRecording] = useState(false);
@@ -59,13 +60,31 @@ function MainApp() {
     setPracticeWords([]);
   };
 
+  const handleTabChange = (tabId: string) => {
+    if (isRecording) {
+      console.log('Tab navigation blocked: Recording in progress');
+      return;
+    }
+    setActiveTab(tabId);
+  };
+
   const renderContent = () => {
     if (activeTab === 'conversation') {
       if (conversationMode === 'active') {
         return (
           <ConversationInterface
             topic={selectedTopic}
-            onBack={handleBack}
+            conversationId={selectedConversationId}
+            onBack={() => {
+              if (isRecording) {
+                console.log('Navigation blocked: Recording in progress');
+                return;
+              }
+              setConversationMode('topics');
+              setSelectedTopic(null);
+              setPracticeWords([]);
+              setSelectedConversationId(null); // Reset conversation ID when going back
+            }}
             externalIsRecording={isRecording}
             onRecordingStateChange={setIsRecording}
           />
@@ -125,6 +144,17 @@ function MainApp() {
         <div className="p-4">
           <ConversationHistory onConversationSelect={(conv) => {
             console.log('Continue conversation:', conv);
+            // Navigate to the selected conversation with proper topic mapping
+            setSelectedTopic({
+              id: conv.topic,
+              name: conv.topic,
+              nameZh: conv.topicZh,
+              difficulty: conv.difficulty
+            });
+            setConversationMode('active');
+            setActiveTab('conversation');
+            // Store conversation ID for continuation
+            setSelectedConversationId(conv.id);
           }} />
         </div>
       );
@@ -148,7 +178,7 @@ function MainApp() {
       </main>
       <NavigationTabs
         activeTab={activeTab}
-        onTabChange={setActiveTab}
+        onTabChange={handleTabChange}
         className="fixed bottom-0 left-0 right-0 z-50"
       />
     </div>

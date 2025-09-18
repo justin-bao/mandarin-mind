@@ -19,6 +19,7 @@ interface Message {
 
 interface ConversationInterfaceProps {
   topic?: any;
+  conversationId?: string;
   onBack?: () => void;
   externalIsRecording?: boolean;
   onRecordingStateChange?: (isRecording: boolean) => void;
@@ -26,11 +27,12 @@ interface ConversationInterfaceProps {
 
 export default function ConversationInterface({ 
   topic, 
+  conversationId: existingConversationId,
   onBack,
   externalIsRecording = false,
   onRecordingStateChange
 }: ConversationInterfaceProps) {
-  const [conversationId, setConversationId] = useState<string | null>(null);
+  const [conversationId, setConversationId] = useState<string | null>(existingConversationId || null);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
@@ -63,12 +65,14 @@ export default function ConversationInterface({
     },
   });
 
-  // Initialize conversation on mount
+  // Initialize conversation on mount (only if no existing conversation)
   useEffect(() => {
-    if (!conversationId && !createConversationMutation.isPending) {
+    if (existingConversationId) {
+      setConversationId(existingConversationId);
+    } else if (!conversationId && !createConversationMutation.isPending) {
       createConversationMutation.mutate();
     }
-  }, []);
+  }, [existingConversationId]);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
