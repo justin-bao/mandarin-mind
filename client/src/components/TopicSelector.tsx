@@ -26,6 +26,7 @@ interface Topic {
 interface TopicSelectorProps {
   onTopicSelect: (topic: Topic) => void;
   selectedTopic?: Topic | null;
+  isRecordingActive?: boolean;
 }
 
 const topics: Topic[] = [
@@ -95,7 +96,7 @@ const topics: Topic[] = [
   }
 ];
 
-export default function TopicSelector({ onTopicSelect, selectedTopic }: TopicSelectorProps) {
+export default function TopicSelector({ onTopicSelect, selectedTopic, isRecordingActive = false }: TopicSelectorProps) {
   const getDifficultyColor = (difficulty: string) => {
     switch (difficulty) {
       case 'Beginner': return 'bg-chart-2 text-white';
@@ -116,10 +117,18 @@ export default function TopicSelector({ onTopicSelect, selectedTopic }: TopicSel
         {topics.map((topic) => (
           <Card
             key={topic.id}
-            className={`p-4 cursor-pointer transition-all hover-elevate ${
+            className={`p-4 transition-all ${
+              isRecordingActive 
+                ? 'cursor-not-allowed opacity-50' 
+                : 'cursor-pointer hover-elevate'
+            } ${
               selectedTopic?.id === topic.id ? 'ring-2 ring-primary' : ''
             }`}
             onClick={() => {
+              if (isRecordingActive) {
+                console.log('Topic selection blocked: Recording in progress');
+                return;
+              }
               onTopicSelect(topic);
               console.log('Topic selected:', topic.name);
             }}

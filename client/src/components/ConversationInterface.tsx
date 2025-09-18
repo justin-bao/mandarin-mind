@@ -20,12 +20,18 @@ interface Message {
 interface ConversationInterfaceProps {
   topic?: any;
   onBack?: () => void;
+  externalIsRecording?: boolean;
+  onRecordingStateChange?: (isRecording: boolean) => void;
 }
 
-export default function ConversationInterface({ topic, onBack }: ConversationInterfaceProps) {
+export default function ConversationInterface({ 
+  topic, 
+  onBack,
+  externalIsRecording = false,
+  onRecordingStateChange
+}: ConversationInterfaceProps) {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
-  const [isRecording, setIsRecording] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
 
@@ -76,17 +82,18 @@ export default function ConversationInterface({ topic, onBack }: ConversationInt
 
   const handleRecordingComplete = (audioBlob: Blob) => {
     if (!conversationId) return;
-    setIsRecording(false);
+    onRecordingStateChange?.(false);
     sendAudioMutation.mutate(audioBlob);
   };
 
   const handleRecordingStart = () => {
-    console.log('handleRecordingStart called - setting parent isRecording to true');
-    setIsRecording(true);
+    console.log('handleRecordingStart called - setting external isRecording to true');
+    onRecordingStateChange?.(true);
   };
 
   const handleRecordingStop = () => {
-    setIsRecording(false);
+    console.log('handleRecordingStop called - setting external isRecording to false');
+    onRecordingStateChange?.(false);
   };
 
   return (
@@ -158,13 +165,13 @@ export default function ConversationInterface({ topic, onBack }: ConversationInt
               onRecordingComplete={handleRecordingComplete}
               onRecordingStart={handleRecordingStart}
               onRecordingStop={handleRecordingStop}
-              externalIsRecording={isRecording}
+              externalIsRecording={externalIsRecording}
             />
             <Button
               variant="outline"
               onClick={() => {
                 setShowVoiceRecorder(false);
-                setIsRecording(false);
+                onRecordingStateChange?.(false);
               }}
               className="w-full"
               data-testid="button-cancel-recording"

@@ -29,18 +29,31 @@ function MainApp() {
   const [selectedTopic, setSelectedTopic] = useState<any>(null);
   const [conversationMode, setConversationMode] = useState<'topics' | 'practice' | 'freeform' | 'active'>('topics');
   const [practiceWords, setPracticeWords] = useState<any[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
 
   const handleTopicSelect = (topic: any) => {
+    if (isRecording) {
+      console.log('Navigation blocked: Recording in progress');
+      return;
+    }
     setSelectedTopic(topic);
     setConversationMode('active');
   };
 
   const handleStartPractice = (words: any[]) => {
+    if (isRecording) {
+      console.log('Navigation blocked: Recording in progress');
+      return;
+    }
     setPracticeWords(words);
     setConversationMode('active');
   };
 
   const handleBack = () => {
+    if (isRecording) {
+      console.log('Navigation blocked: Recording in progress');
+      return;
+    }
     setConversationMode('topics');
     setSelectedTopic(null);
     setPracticeWords([]);
@@ -53,6 +66,8 @@ function MainApp() {
           <ConversationInterface
             topic={selectedTopic}
             onBack={handleBack}
+            externalIsRecording={isRecording}
+            onRecordingStateChange={setIsRecording}
           />
         );
       }
@@ -86,6 +101,7 @@ function MainApp() {
             <TopicSelector 
               onTopicSelect={handleTopicSelect}
               selectedTopic={selectedTopic}
+              isRecordingActive={isRecording}
             />
           )}
           
