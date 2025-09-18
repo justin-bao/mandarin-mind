@@ -81,6 +81,7 @@ export default function ConversationInterface({ topic, onBack }: ConversationInt
   };
 
   const handleRecordingStart = () => {
+    console.log('handleRecordingStart called - setting parent isRecording to true');
     setIsRecording(true);
   };
 

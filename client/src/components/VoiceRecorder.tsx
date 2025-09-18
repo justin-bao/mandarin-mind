@@ -50,6 +50,7 @@ export default function VoiceRecorder({
       
       console.log('Setting isRecording to true');
       setIsRecording(true);
+      console.log('Calling onRecordingStart callback');
       onRecordingStart?.();
       setRecordingDuration(0);
       
