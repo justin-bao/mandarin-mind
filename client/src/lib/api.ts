@@ -1,0 +1,114 @@
+import { apiRequest } from "./queryClient";
+
+// Audio recording utilities
+export const startAudioRecording = (): Promise<MediaRecorder> => {
+  return new Promise((resolve, reject) => {
+    navigator.mediaDevices.getUserMedia({ audio: true })
+      .then(stream => {
+        const mediaRecorder = new MediaRecorder(stream, {
+          mimeType: 'audio/webm;codecs=opus'
+        });
+        resolve(mediaRecorder);
+      })
+      .catch(reject);
+  });
+};
+
+export const stopAudioRecording = (mediaRecorder: MediaRecorder): Promise<Blob> => {
+  return new Promise((resolve) => {
+    const chunks: BlobPart[] = [];
+    
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) {
+        chunks.push(e.data);
+      }
+    };
+    
+    mediaRecorder.onstop = () => {
+      const audioBlob = new Blob(chunks, { type: 'audio/webm;codecs=opus' });
+      resolve(audioBlob);
+    };
+    
+    mediaRecorder.stop();
+    
+    // Stop all tracks to release microphone
+    const stream = mediaRecorder.stream;
+    stream.getTracks().forEach(track => track.stop());
+  });
+};
+
+// API functions
+export const conversationApi = {
+  getAll: async () => {
+    const res = await apiRequest('GET', '/api/conversations');
+    return await res.json();
+  },
+  
+  create: async (data: { topic?: string; topicZh?: string; difficulty?: string }) => {
+    const res = await apiRequest('POST', '/api/conversations', data);
+    return await res.json();
+  },
+    
+  get: async (id: string) => {
+    const res = await apiRequest('GET', `/api/conversations/${id}`);
+    return await res.json();
+  },
+  
+  getMessages: async (id: string) => {
+    const res = await apiRequest('GET', `/api/conversations/${id}/messages`);
+    return await res.json();
+  },
+  
+  sendAudio: async (id: string, audioBlob: Blob) => {
+    const formData = new FormData();
+    formData.append('audio', audioBlob, 'recording.webm');
+    
+    const response = await fetch(`/api/conversations/${id}/audio`, {
+      method: 'POST',
+      body: formData,
+      credentials: 'include'
+    });
+    
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+    
+    return await response.json();
+  }
+};
+
+export const practiceWordsApi = {
+  getAll: async () => {
+    const res = await apiRequest('GET', '/api/practice-words');
+    return await res.json();
+  },
+  
+  create: async (data: { chinese: string; pinyin?: string; english: string }) => {
+    const res = await apiRequest('POST', '/api/practice-words', data);
+    return await res.json();
+  },
+    
+  delete: async (id: string) => {
+    const res = await apiRequest('DELETE', `/api/practice-words/${id}`);
+    return await res.json();
+  }
+};
+
+export const audioApi = {
+  generate: async (text: string) => {
+    const res = await apiRequest('POST', '/api/audio/generate', { text });
+    return await res.json();
+  }
+};
+
+// Audio playback utilities
+export const playAudio = (audioUrl: string): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    const audio = new Audio(audioUrl);
+    
+    audio.onended = () => resolve();
+    audio.onerror = () => reject(new Error('Failed to play audio'));
+    
+    audio.play().catch(reject);
+  });
+};

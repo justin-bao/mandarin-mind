@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ConversationBubble from "./ConversationBubble";
 import VoiceRecorder from "./VoiceRecorder";
 import { Loader2, ArrowLeft, Settings2 } from "lucide-react";
+import { conversationApi } from "@/lib/api";
 
 interface Message {
   id: string;
@@ -21,35 +23,45 @@ interface ConversationInterfaceProps {
 }
 
 export default function ConversationInterface({ topic, onBack }: ConversationInterfaceProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
+  const [conversationId, setConversationId] = useState<string | null>(null);
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
+  const queryClient = useQueryClient();
 
-  // Todo: Remove mock initial message
-  useEffect(() => {
-    if (topic) {
-      const welcomeMessage: Message = {
-        id: '1',
-        text: `你好！我们来聊聊${topic.nameZh}吧。`,
-        pinyin: `Nǐ hǎo! Wǒmen lái liáo liáo ${topic.name} ba.`,
-        translation: `Hello! Let's talk about ${topic.name}.`,
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages([welcomeMessage]);
-    } else {
-      const freeFormMessage: Message = {
-        id: '1',
-        text: '你好！你想聊什么呢？',
-        pinyin: 'Nǐ hǎo! Nǐ xiǎng liáo shén me ne?',
-        translation: 'Hello! What would you like to talk about?',
-        isUser: false,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-      setMessages([freeFormMessage]);
+  // Create conversation when component mounts
+  const createConversationMutation = useMutation({
+    mutationFn: () => conversationApi.create({
+      topic: topic?.name,
+      topicZh: topic?.nameZh,
+      difficulty: topic?.difficulty || 'Beginner'
+    }),
+    onSuccess: (data: any) => {
+      setConversationId(data.id);
     }
-  }, [topic]);
+  });
+
+  // Get messages for the conversation
+  const { data: messages = [], isLoading: messagesLoading } = useQuery({
+    queryKey: ['messages', conversationId],
+    queryFn: () => conversationApi.getMessages(conversationId!),
+    enabled: !!conversationId,
+  });
+
+  // Send audio mutation
+  const sendAudioMutation = useMutation({
+    mutationFn: (audioBlob: Blob) => conversationApi.sendAudio(conversationId!, audioBlob),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+      setShowVoiceRecorder(false);
+    },
+  });
+
+  // Initialize conversation on mount
+  useEffect(() => {
+    if (!conversationId && !createConversationMutation.isPending) {
+      createConversationMutation.mutate();
+    }
+  }, []);
 
   // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
@@ -62,37 +74,8 @@ export default function ConversationInterface({ topic, onBack }: ConversationInt
   }, [messages]);
 
   const handleRecordingComplete = (audioBlob: Blob) => {
-    console.log('Audio recorded:', audioBlob);
-    setIsLoading(true);
-    setShowVoiceRecorder(false);
-
-    // Todo: Replace with actual speech-to-text processing
-    setTimeout(() => {
-      const userMessage: Message = {
-        id: Date.now().toString(),
-        text: '我很好，谢谢！',
-        pinyin: 'Wǒ hěn hǎo, xiè xiè!',
-        translation: 'I\'m doing well, thank you!',
-        isUser: true,
-        timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-      };
-
-      setMessages(prev => [...prev, userMessage]);
-
-      // Simulate AI response
-      setTimeout(() => {
-        const aiResponse: Message = {
-          id: (Date.now() + 1).toString(),
-          text: '很棒！你最近在做什么有趣的事情吗？',
-          pinyin: 'Hěn bàng! Nǐ zuì jìn zài zuò shén me yǒu qù de shì qíng ma?',
-          translation: 'Great! Have you been doing anything interesting lately?',
-          isUser: false,
-          timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-        };
-        setMessages(prev => [...prev, aiResponse]);
-        setIsLoading(false);
-      }, 2000);
-    }, 1500);
+    if (!conversationId) return;
+    sendAudioMutation.mutate(audioBlob);
   };
 
   return (
@@ -134,18 +117,18 @@ export default function ConversationInterface({ topic, onBack }: ConversationInt
       {/* Messages */}
       <ScrollArea ref={scrollAreaRef} className="flex-1 p-4">
         <div className="space-y-4">
-          {messages.map((message) => (
+          {messages.map((message: any) => (
             <ConversationBubble
               key={message.id}
               text={message.text}
-              pinyin={message.pinyin}
-              translation={message.translation}
-              isUser={message.isUser}
-              timestamp={message.timestamp}
+              pinyin={message.pinyin || ''}
+              translation={message.translation || ''}
+              isUser={message.isUser === 1}
+              timestamp={new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             />
           ))}
           
-          {isLoading && (
+          {(messagesLoading || sendAudioMutation.isPending) && (
             <div className="flex justify-center">
               <div className="flex items-center gap-2 text-muted-foreground">
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -174,7 +157,7 @@ export default function ConversationInterface({ topic, onBack }: ConversationInt
           <Button
             size="lg"
             onClick={() => setShowVoiceRecorder(true)}
-            disabled={isLoading}
+            disabled={sendAudioMutation.isPending || !conversationId}
             className="w-full"
             data-testid="button-start-recording"
           >

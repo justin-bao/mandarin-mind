@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Mic, MicOff, Square, Play, Pause } from "lucide-react";
+import { startAudioRecording, stopAudioRecording, playAudio } from "@/lib/api";
 
 interface VoiceRecorderProps {
   onRecordingComplete?: (audioBlob: Blob) => void;
@@ -13,39 +14,66 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
   const [isPlaying, setIsPlaying] = useState(false);
   const [hasRecording, setHasRecording] = useState(false);
   const [recordingDuration, setRecordingDuration] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingBlobRef = useRef<Blob | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
-  const startRecording = () => {
-    console.log('Starting recording...');
-    setIsRecording(true);
-    setRecordingDuration(0);
-    
-    // Simulate recording duration
-    const interval = setInterval(() => {
-      setRecordingDuration(prev => prev + 1);
-    }, 1000);
-    
-    // Store interval for cleanup
-    (window as any).recordingInterval = interval;
-  };
-
-  const stopRecording = () => {
-    console.log('Stopping recording...');
-    setIsRecording(false);
-    setHasRecording(true);
-    
-    if ((window as any).recordingInterval) {
-      clearInterval((window as any).recordingInterval);
+  const startRecording = async () => {
+    try {
+      console.log('Starting recording...');
+      const mediaRecorder = await startAudioRecording();
+      mediaRecorderRef.current = mediaRecorder;
+      
+      setIsRecording(true);
+      setRecordingDuration(0);
+      
+      // Start duration counter
+      intervalRef.current = setInterval(() => {
+        setRecordingDuration(prev => prev + 1);
+      }, 1000);
+      
+      mediaRecorder.start();
+    } catch (error) {
+      console.error('Failed to start recording:', error);
+      alert('Failed to start recording. Please check your microphone permissions.');
     }
-    
-    // Simulate audio blob
-    const mockBlob = new Blob(['mock-audio'], { type: 'audio/wav' });
-    onRecordingComplete?.(mockBlob);
   };
 
-  const playRecording = () => {
-    console.log('Playing recording...');
-    setIsPlaying(true);
-    setTimeout(() => setIsPlaying(false), recordingDuration * 1000);
+  const stopRecording = async () => {
+    if (!mediaRecorderRef.current) return;
+    
+    try {
+      console.log('Stopping recording...');
+      const audioBlob = await stopAudioRecording(mediaRecorderRef.current);
+      
+      setIsRecording(false);
+      setHasRecording(true);
+      recordingBlobRef.current = audioBlob;
+      
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+      
+      onRecordingComplete?.(audioBlob);
+    } catch (error) {
+      console.error('Failed to stop recording:', error);
+    }
+  };
+
+  const playRecording = async () => {
+    if (!recordingBlobRef.current) return;
+    
+    try {
+      console.log('Playing recording...');
+      setIsPlaying(true);
+      const audioUrl = URL.createObjectURL(recordingBlobRef.current);
+      await playAudio(audioUrl);
+      URL.revokeObjectURL(audioUrl);
+      setIsPlaying(false);
+    } catch (error) {
+      console.error('Failed to play recording:', error);
+      setIsPlaying(false);
+    }
   };
 
   const formatDuration = (seconds: number) => {
@@ -106,6 +134,7 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
               onClick={() => {
                 setHasRecording(false);
                 setRecordingDuration(0);
+                recordingBlobRef.current = null;
                 console.log('Recording cleared');
               }}
               data-testid="button-clear-recording"
