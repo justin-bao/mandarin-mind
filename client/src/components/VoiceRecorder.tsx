@@ -1,4 +1,4 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Mic, MicOff, Square, Play, Pause } from "lucide-react";
@@ -117,6 +117,19 @@ export default function VoiceRecorder({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  // Cleanup when component unmounts or user leaves practice mode
+  useEffect(() => {
+    return () => {
+      console.log('VoiceRecorder cleanup - stopping any active recording');
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+      }
+    };
+  }, []);
+
   console.log('VoiceRecorder render - actualIsRecording:', actualIsRecording, 'hasRecording:', hasRecording);
 
   return (
@@ -128,12 +141,12 @@ export default function VoiceRecorder({
             variant={actualIsRecording ? "destructive" : "default"}
             className="h-16 w-16 rounded-full"
             onClick={() => {
-              console.log('Voice button pressed, actualIsRecording:', actualIsRecording);
+              console.log('Voice button clicked! Current actualIsRecording:', actualIsRecording);
               if (actualIsRecording) {
-                console.log('Calling stopRecording');
+                console.log('RED STOP BUTTON CLICKED - calling stopRecording');
                 stopRecording();
               } else {
-                console.log('Calling startRecording');
+                console.log('MIC BUTTON CLICKED - calling startRecording');
                 startRecording();
               }
             }}
