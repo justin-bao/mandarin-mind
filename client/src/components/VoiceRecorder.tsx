@@ -160,7 +160,7 @@ export default function VoiceRecorder({
           </Button>
           
           {actualIsRecording && (
-            <div className="absolute -inset-2 rounded-full border-2 border-destructive animate-pulse" />
+            <div className="absolute -inset-2 rounded-full border-2 border-destructive animate-pulse pointer-events-none" />
           )}
         </div>
         
