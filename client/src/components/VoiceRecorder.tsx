@@ -49,6 +49,7 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
   };
 
   const stopRecording = async () => {
+    console.log('stopRecording called, mediaRecorderRef.current:', mediaRecorderRef.current);
     if (!mediaRecorderRef.current) {
       console.log('No media recorder to stop');
       return;
@@ -103,7 +104,16 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
             size="icon"
             variant={isRecording ? "destructive" : "default"}
             className="h-16 w-16 rounded-full"
-            onClick={isRecording ? stopRecording : startRecording}
+            onClick={() => {
+              console.log('Voice button pressed, isRecording:', isRecording);
+              if (isRecording) {
+                console.log('Calling stopRecording');
+                stopRecording();
+              } else {
+                console.log('Calling startRecording');
+                startRecording();
+              }
+            }}
             data-testid="button-record-voice"
           >
             {isRecording ? (
