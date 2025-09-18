@@ -22,17 +22,21 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
   const startRecording = async () => {
     try {
       console.log('Starting recording...');
+      console.log('About to call startAudioRecording()');
       const mediaRecorder = await startAudioRecording();
+      console.log('Got mediaRecorder:', mediaRecorder);
       mediaRecorderRef.current = mediaRecorder;
       chunksRef.current = [];
       
       // Set up data collection
       mediaRecorder.ondataavailable = (e) => {
+        console.log('Data available:', e.data.size);
         if (e.data.size > 0) {
           chunksRef.current.push(e.data);
         }
       };
       
+      console.log('Setting isRecording to true');
       setIsRecording(true);
       setRecordingDuration(0);
       
@@ -41,7 +45,9 @@ export default function VoiceRecorder({ onRecordingComplete, className }: VoiceR
         setRecordingDuration(prev => prev + 1);
       }, 1000);
       
+      console.log('Starting mediaRecorder');
       mediaRecorder.start();
+      console.log('MediaRecorder started successfully');
     } catch (error) {
       console.error('Failed to start recording:', error);
       alert('Failed to start recording. Please check your microphone permissions.');
