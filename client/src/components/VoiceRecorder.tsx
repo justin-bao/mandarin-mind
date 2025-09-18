@@ -117,6 +117,8 @@ export default function VoiceRecorder({
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   };
 
+  console.log('VoiceRecorder render - actualIsRecording:', actualIsRecording, 'hasRecording:', hasRecording);
+
   return (
     <Card className={`p-6 ${className}`}>
       <div className="flex flex-col items-center gap-4">
