@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import multer from "multer";
 import { storage } from "./storage";
 import { mandarinTutorService } from "./openai";
-import { insertConversationSchema, insertMessageSchema, insertPracticeWordSchema } from "@shared/schema";
+import { insertConversationSchema, insertMessageSchema, insertPracticeWordSchema, insertPhraseListSchema, insertPhraseListItemSchema } from "@shared/schema";
 
 // Configure multer for audio file uploads
 const upload = multer({
@@ -174,6 +174,116 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error deleting practice word:', error);
       res.status(500).json({ error: 'Failed to delete practice word' });
+    }
+  });
+
+  // Phrase Lists
+  app.get('/api/phrase-lists', async (req: Request, res: Response) => {
+    try {
+      const lists = await storage.getPhraseLists();
+      // Attach item count to each list
+      const listsWithCount = await Promise.all(
+        lists.map(async (list) => {
+          const items = await storage.getPhraseListItems(list.id);
+          return { ...list, itemCount: items.length };
+        })
+      );
+      res.json(listsWithCount);
+    } catch (error) {
+      console.error('Error fetching phrase lists:', error);
+      res.status(500).json({ error: 'Failed to fetch phrase lists' });
+    }
+  });
+
+  app.post('/api/phrase-lists', async (req: Request, res: Response) => {
+    try {
+      const validatedData = insertPhraseListSchema.parse(req.body);
+      const list = await storage.createPhraseList(validatedData);
+      res.json(list);
+    } catch (error) {
+      console.error('Error creating phrase list:', error);
+      res.status(400).json({ error: 'Failed to create phrase list' });
+    }
+  });
+
+  app.get('/api/phrase-lists/:id', async (req: Request, res: Response) => {
+    try {
+      const list = await storage.getPhraseList(req.params.id);
+      if (!list) {
+        return res.status(404).json({ error: 'Phrase list not found' });
+      }
+      res.json(list);
+    } catch (error) {
+      console.error('Error fetching phrase list:', error);
+      res.status(500).json({ error: 'Failed to fetch phrase list' });
+    }
+  });
+
+  app.patch('/api/phrase-lists/:id', async (req: Request, res: Response) => {
+    try {
+      const { name, description } = req.body;
+      const list = await storage.updatePhraseList(req.params.id, { name, description });
+      res.json(list);
+    } catch (error) {
+      console.error('Error updating phrase list:', error);
+      res.status(400).json({ error: 'Failed to update phrase list' });
+    }
+  });
+
+  app.delete('/api/phrase-lists/:id', async (req: Request, res: Response) => {
+    try {
+      await storage.deletePhraseList(req.params.id);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error deleting phrase list:', error);
+      res.status(500).json({ error: 'Failed to delete phrase list' });
+    }
+  });
+
+  // Phrase List Items
+  app.get('/api/phrase-lists/:id/items', async (req: Request, res: Response) => {
+    try {
+      const items = await storage.getPhraseListItems(req.params.id);
+      res.json(items);
+    } catch (error) {
+      console.error('Error fetching phrase list items:', error);
+      res.status(500).json({ error: 'Failed to fetch phrase list items' });
+    }
+  });
+
+  app.post('/api/phrase-lists/:id/items', async (req: Request, res: Response) => {
+    try {
+      const validatedData = insertPhraseListItemSchema.parse({ ...req.body, listId: req.params.id });
+      const item = await storage.createPhraseListItem(validatedData);
+      res.json(item);
+    } catch (error) {
+      console.error('Error creating phrase list item:', error);
+      res.status(400).json({ error: 'Failed to create phrase list item' });
+    }
+  });
+
+  app.delete('/api/phrase-lists/:listId/items/:itemId', async (req: Request, res: Response) => {
+    try {
+      await storage.deletePhraseListItem(req.params.itemId);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Error deleting phrase list item:', error);
+      res.status(500).json({ error: 'Failed to delete phrase list item' });
+    }
+  });
+
+  // Phrase lookup: given Chinese text, return pinyin + English via AI
+  app.post('/api/phrases/lookup', async (req: Request, res: Response) => {
+    try {
+      const { chinese } = req.body;
+      if (!chinese || typeof chinese !== 'string') {
+        return res.status(400).json({ error: 'Chinese text is required' });
+      }
+      const result = await mandarinTutorService.addPinyinAndTranslation(chinese.trim());
+      res.json(result);
+    } catch (error) {
+      console.error('Error looking up phrase:', error);
+      res.status(500).json({ error: 'Failed to look up phrase' });
     }
   });
 

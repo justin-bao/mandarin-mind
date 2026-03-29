@@ -27,9 +27,28 @@ export const messages = pgTable("messages", {
   createdAt: timestamp("created_at").defaultNow(),
 });
 
-// Practice words table
+// Practice words table (legacy)
 export const practiceWords = pgTable("practice_words", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  chinese: text("chinese").notNull(),
+  pinyin: text("pinyin"),
+  english: text("english").notNull(),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// Phrase lists table
+export const phraseLists = pgTable("phrase_lists", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  name: text("name").notNull(),
+  description: text("description"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+// Phrase list items table
+export const phraseListItems = pgTable("phrase_list_items", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  listId: varchar("list_id").notNull().references(() => phraseLists.id, { onDelete: "cascade" }),
   chinese: text("chinese").notNull(),
   pinyin: text("pinyin"),
   english: text("english").notNull(),
@@ -53,10 +72,25 @@ export const insertPracticeWordSchema = createInsertSchema(practiceWords).omit({
   createdAt: true,
 });
 
+export const insertPhraseListSchema = createInsertSchema(phraseLists).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
+export const insertPhraseListItemSchema = createInsertSchema(phraseListItems).omit({
+  id: true,
+  createdAt: true,
+});
+
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type InsertPracticeWord = z.infer<typeof insertPracticeWordSchema>;
+export type InsertPhraseList = z.infer<typeof insertPhraseListSchema>;
+export type InsertPhraseListItem = z.infer<typeof insertPhraseListItemSchema>;
 
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type PracticeWord = typeof practiceWords.$inferSelect;
+export type PhraseList = typeof phraseLists.$inferSelect;
+export type PhraseListItem = typeof phraseListItems.$inferSelect;

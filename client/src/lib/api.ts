@@ -93,6 +93,44 @@ export const audioApi = {
   }
 };
 
+export const phraseListsApi = {
+  getAll: async () => {
+    const res = await apiRequest('GET', '/api/phrase-lists');
+    return await res.json();
+  },
+  create: async (data: { name: string; description?: string }) => {
+    const res = await apiRequest('POST', '/api/phrase-lists', data);
+    return await res.json();
+  },
+  update: async (id: string, data: { name?: string; description?: string }) => {
+    const res = await apiRequest('PATCH', `/api/phrase-lists/${id}`, data);
+    return await res.json();
+  },
+  delete: async (id: string) => {
+    const res = await apiRequest('DELETE', `/api/phrase-lists/${id}`);
+    return await res.json();
+  },
+  getItems: async (listId: string) => {
+    const res = await apiRequest('GET', `/api/phrase-lists/${listId}/items`);
+    return await res.json();
+  },
+  addItem: async (listId: string, data: { chinese: string; pinyin?: string; english: string }) => {
+    const res = await apiRequest('POST', `/api/phrase-lists/${listId}/items`, data);
+    return await res.json();
+  },
+  deleteItem: async (listId: string, itemId: string) => {
+    const res = await apiRequest('DELETE', `/api/phrase-lists/${listId}/items/${itemId}`);
+    return await res.json();
+  },
+};
+
+export const phraseLookupApi = {
+  lookup: async (chinese: string): Promise<{ pinyin: string; english: string }> => {
+    const res = await apiRequest('POST', '/api/phrases/lookup', { chinese });
+    return await res.json();
+  },
+};
+
 // Audio playback utilities
 export const playAudio = (audioUrl: string): Promise<void> => {
   return new Promise((resolve, reject) => {

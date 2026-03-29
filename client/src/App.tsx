@@ -8,7 +8,7 @@ import NotFound from "@/pages/not-found";
 
 // Import components
 import TopicSelector from "@/components/TopicSelector";
-import WordPractice from "@/components/WordPractice";
+import PhraseListsManager from "@/components/PhraseListsManager";
 import ConversationInterface from "@/components/ConversationInterface";
 import ConversationHistory from "@/components/ConversationHistory";
 import NavigationTabs from "@/components/NavigationTabs";
@@ -74,7 +74,7 @@ function MainApp() {
         return (
           <ConversationInterface
             topic={selectedTopic}
-            conversationId={selectedConversationId}
+            conversationId={selectedConversationId ?? undefined}
             onBack={() => {
               if (isRecording) {
                 console.log('Navigation blocked: Recording in progress');
@@ -134,7 +134,7 @@ function MainApp() {
     if (activeTab === 'practice') {
       return (
         <div className="p-4">
-          <WordPractice onStartPractice={handleStartPractice} />
+          <PhraseListsManager onStartPractice={handleStartPractice} />
         </div>
       );
     }

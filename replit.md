@@ -54,7 +54,10 @@ Preferred communication style: Simple, everyday language.
 - Tap-to-translate functionality for instant comprehension
 - Audio playback for pronunciation practice
 - Conversation history with search and filtering capabilities
-- Custom word practice lists for personalized learning
+- Phrase Lists: named collections (e.g. Restaurant, Job Interview) with full CRUD
+  - Autocomplete/autosuggest on Chinese input using a built-in 100+ phrase dictionary
+  - AI-powered pinyin + English auto-population via lookup endpoint
+  - Practice sessions launchable from any list
 - Progress tracking through conversation metrics
 
 ## External Dependencies
