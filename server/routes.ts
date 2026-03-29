@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import multer from "multer";
 import { storage } from "./storage";
 import { mandarinTutorService } from "./openai";
+import { lookupPhrase } from "./translation";
 import { insertConversationSchema, insertMessageSchema, insertPracticeWordSchema, insertPhraseListSchema, insertPhraseListItemSchema } from "@shared/schema";
 
 // Configure multer for audio file uploads
@@ -272,14 +273,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Phrase lookup: given Chinese text, return pinyin + English via AI
+  // Phrase lookup: given Chinese text, return pinyin (offline) + English (free API)
   app.post('/api/phrases/lookup', async (req: Request, res: Response) => {
     try {
       const { chinese } = req.body;
       if (!chinese || typeof chinese !== 'string') {
         return res.status(400).json({ error: 'Chinese text is required' });
       }
-      const result = await mandarinTutorService.addPinyinAndTranslation(chinese.trim());
+      const result = await lookupPhrase(chinese.trim());
       res.json(result);
     } catch (error) {
       console.error('Error looking up phrase:', error);
