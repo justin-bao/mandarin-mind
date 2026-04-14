@@ -298,14 +298,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Sentence translation: tokenise + translate a full Chinese sentence (free services)
+  // Sentence translation: tokenise + translate (supports zh-en and en-zh directions)
   app.post('/api/translate/sentence', async (req: Request, res: Response) => {
     try {
-      const { chinese } = req.body;
-      if (!chinese || typeof chinese !== 'string') {
-        return res.status(400).json({ error: 'chinese text is required' });
+      const { text, direction } = req.body;
+      if (!text || typeof text !== 'string') {
+        return res.status(400).json({ error: 'text is required' });
       }
-      const result = await translateSentence(chinese.trim());
+      const dir = direction === 'en-zh' ? 'en-zh' : 'zh-en';
+      const result = await translateSentence(text.trim(), dir);
       res.json(result);
     } catch (error) {
       console.error('Error translating sentence:', error);

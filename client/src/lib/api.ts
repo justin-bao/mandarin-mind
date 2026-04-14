@@ -140,11 +140,15 @@ export const phraseLookupApi = {
 };
 
 export const translateApi = {
-  sentence: async (chinese: string): Promise<{
+  sentence: async (
+    text: string,
+    direction: 'zh-en' | 'en-zh' = 'zh-en'
+  ): Promise<{
     tokens: { char: string; pinyin: string }[];
+    chinese: string;
     translation: string;
   }> => {
-    const res = await apiRequest('POST', '/api/translate/sentence', { chinese });
+    const res = await apiRequest('POST', '/api/translate/sentence', { text, direction });
     return await res.json();
   },
   lookup: async (chinese: string): Promise<{ pinyin: string; english: string }> => {

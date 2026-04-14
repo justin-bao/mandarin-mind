@@ -14,12 +14,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Languages, Loader2, Plus, X, BookOpen } from "lucide-react";
+import { Languages, Loader2, Plus, X, BookOpen, ArrowLeftRight } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
-interface Token { char: string; pinyin: string }
+export interface Token { char: string; pinyin: string }
 
-interface SelectionPopup {
+export interface SelectionPopupState {
   chinese: string;
   pinyin: string;
   translation: string;
@@ -28,16 +28,14 @@ interface SelectionPopup {
   loading: boolean;
 }
 
-// ─── Annotated sentence display ───────────────────────────────────────────────
-function AnnotatedSentence({
+// ─── Annotated sentence display (exported for reuse) ─────────────────────────
+export function AnnotatedSentence({
   tokens,
   onSelectionChange,
 }: {
   tokens: Token[];
   onSelectionChange: (chinese: string, rect: DOMRect | null) => void;
 }) {
-  const containerRef = useRef<HTMLDivElement>(null);
-
   const handleMouseUp = useCallback(() => {
     const sel = window.getSelection();
     if (!sel || sel.isCollapsed) {
@@ -45,7 +43,6 @@ function AnnotatedSentence({
       return;
     }
     const raw = sel.toString();
-    // keep only CJK unified ideographs + common Chinese punctuation
     const chinese = raw.replace(/[^\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/g, "").trim();
     if (!chinese) {
       onSelectionChange("", null);
@@ -58,7 +55,6 @@ function AnnotatedSentence({
 
   return (
     <div
-      ref={containerRef}
       onMouseUp={handleMouseUp}
       onTouchEnd={handleMouseUp}
       className="select-text cursor-text"
@@ -87,22 +83,28 @@ function AnnotatedSentence({
   );
 }
 
-// ─── Selection popup ──────────────────────────────────────────────────────────
+// ─── Selection popup (exported for reuse) ────────────────────────────────────
 interface PopupProps {
-  popup: SelectionPopup;
+  popup: SelectionPopupState;
   onClose: () => void;
-  phraseListId?: string;
+  preferredListId?: string;
 }
 
-function SelectionPopupPanel({ popup, onClose, phraseListId }: PopupProps) {
+export function SelectionPopupPanel({ popup, onClose, preferredListId }: PopupProps) {
   const { toast } = useToast();
-  const [selectedListId, setSelectedListId] = useState(phraseListId ?? "");
+  const [selectedListId, setSelectedListId] = useState(preferredListId ?? "");
   const popupRef = useRef<HTMLDivElement>(null);
 
   const { data: lists = [] } = useQuery<{ id: string; name: string }[]>({
     queryKey: ["/api/phrase-lists"],
     queryFn: phraseListsApi.getAll,
   });
+
+  useEffect(() => {
+    if (!selectedListId && lists.length > 0) {
+      setSelectedListId(preferredListId ?? lists[0].id);
+    }
+  }, [lists, preferredListId, selectedListId]);
 
   const addMutation = useMutation({
     mutationFn: (listId: string) =>
@@ -119,17 +121,16 @@ function SelectionPopupPanel({ popup, onClose, phraseListId }: PopupProps) {
     onError: () => toast({ description: "Failed to add phrase", variant: "destructive" }),
   });
 
-  // Position the popup above the selection, clamped to viewport
+  // Position: above the selection midpoint, clamped to viewport
+  const leftPx = Math.max(8, Math.min(popup.x - 128, window.innerWidth - 272));
   const style: React.CSSProperties = {
     position: "fixed",
     zIndex: 9999,
-    // start at selection midpoint, then adjust after measure
-    left: Math.max(8, Math.min(popup.x - 120, window.innerWidth - 256)),
+    left: leftPx,
     top: Math.max(8, popup.y - 8),
     transform: "translateY(-100%)",
   };
 
-  // Close when clicking outside
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (popupRef.current && !popupRef.current.contains(e.target as Node)) {
@@ -202,18 +203,77 @@ function SelectionPopupPanel({ popup, onClose, phraseListId }: PopupProps) {
   );
 }
 
+// ─── Shared hook: handles the selection→popup→lookup flow ────────────────────
+export function useSelectionPopup() {
+  const [popup, setPopup] = useState<SelectionPopupState | null>(null);
+
+  const handleSelectionChange = useCallback(async (chinese: string, rect: DOMRect | null) => {
+    if (!chinese || !rect) {
+      setPopup(null);
+      return;
+    }
+    const midX = rect.left + rect.width / 2;
+    // rect.top is already viewport-relative — correct for position:fixed
+    const topY = rect.top;
+
+    setPopup({ chinese, pinyin: "", translation: "", x: midX, y: topY, loading: true });
+
+    try {
+      const result = await translateApi.lookup(chinese);
+      setPopup((prev) =>
+        prev?.chinese === chinese
+          ? { ...prev, pinyin: result.pinyin, translation: result.english, loading: false }
+          : prev
+      );
+    } catch {
+      setPopup(null);
+    }
+  }, []);
+
+  return { popup, setPopup, handleSelectionChange };
+}
+
+// ─── Direction toggle ─────────────────────────────────────────────────────────
+type Direction = "zh-en" | "en-zh";
+
+function DirectionToggle({ direction, onToggle }: { direction: Direction; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded-md hover-elevate"
+    >
+      <span className={direction === "zh-en" ? "text-foreground font-semibold" : ""}>Chinese</span>
+      <ArrowLeftRight className="h-3.5 w-3.5" />
+      <span className={direction === "en-zh" ? "text-foreground font-semibold" : ""}>English</span>
+    </button>
+  );
+}
+
 // ─── Main Sentence Translator ─────────────────────────────────────────────────
 interface SentenceTranslatorProps {
-  /** If provided, the popup will pre-select this list */
   currentListId?: string;
 }
 
 export default function SentenceTranslator({ currentListId }: SentenceTranslatorProps) {
   const { toast } = useToast();
+  const [direction, setDirection] = useState<Direction>("zh-en");
   const [input, setInput] = useState("");
-  const [result, setResult] = useState<{ tokens: Token[]; translation: string } | null>(null);
+  const [result, setResult] = useState<{
+    tokens: Token[];
+    chinese: string;
+    translation: string;
+  } | null>(null);
   const [isTranslating, setIsTranslating] = useState(false);
-  const [popup, setPopup] = useState<SelectionPopup | null>(null);
+  const { popup, setPopup, handleSelectionChange } = useSelectionPopup();
+
+  // Clear result when direction changes
+  const handleToggleDirection = () => {
+    setDirection((d) => (d === "zh-en" ? "en-zh" : "zh-en"));
+    setResult(null);
+    setPopup(null);
+    setInput("");
+  };
 
   const handleTranslate = async () => {
     const text = input.trim();
@@ -222,7 +282,7 @@ export default function SentenceTranslator({ currentListId }: SentenceTranslator
     setResult(null);
     setPopup(null);
     try {
-      const data = await translateApi.sentence(text);
+      const data = await translateApi.sentence(text, direction);
       setResult(data);
     } catch {
       toast({ description: "Translation failed. Please try again.", variant: "destructive" });
@@ -231,53 +291,33 @@ export default function SentenceTranslator({ currentListId }: SentenceTranslator
     }
   };
 
-  const handleSelectionChange = useCallback(
-    async (chinese: string, rect: DOMRect | null) => {
-      if (!chinese || !rect) {
-        setPopup(null);
-        return;
-      }
-      const midX = rect.left + rect.width / 2;
-      const topY = rect.top + window.scrollY;
-
-      // Show popup immediately with loading state
-      setPopup({ chinese, pinyin: "", translation: "", x: midX, y: topY, loading: true });
-
-      // Fetch pinyin + translation in background
-      try {
-        const result = await translateApi.lookup(chinese);
-        setPopup((prev) =>
-          prev?.chinese === chinese
-            ? { ...prev, pinyin: result.pinyin, translation: result.english, loading: false }
-            : prev
-        );
-      } catch {
-        setPopup(null);
-      }
-    },
-    []
-  );
+  const inputLabel = direction === "zh-en" ? "Chinese Sentence" : "English Sentence";
+  const inputPlaceholder = direction === "zh-en" ? "输入中文句子…" : "Enter an English sentence…";
+  const outputLangLabel = direction === "zh-en" ? "English" : "Original English";
 
   return (
     <div className="space-y-4">
-      <div>
-        <h2 className="text-xl font-semibold">Sentence Translator</h2>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Paste or type a Chinese sentence. After translating, select any sub-phrase to look it up or add it to a list.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h2 className="text-xl font-semibold">Sentence Translator</h2>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Translate a sentence and select any Chinese sub-phrase to look it up or save it to a list.
+          </p>
+        </div>
+        <DirectionToggle direction={direction} onToggle={handleToggleDirection} />
       </div>
 
       {/* Input */}
       <Card>
         <CardContent className="p-4 space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="sentence-input">Chinese Sentence</Label>
+            <Label htmlFor="sentence-input">{inputLabel}</Label>
             <Textarea
               id="sentence-input"
-              placeholder="输入中文句子…"
+              placeholder={inputPlaceholder}
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              className="font-chinese text-lg resize-none"
+              className={direction === "zh-en" ? "font-chinese text-lg resize-none" : "resize-none"}
               rows={3}
               onKeyDown={(e) => {
                 if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) handleTranslate();
@@ -304,7 +344,7 @@ export default function SentenceTranslator({ currentListId }: SentenceTranslator
               <BookOpen className="h-4 w-4 text-muted-foreground" />
               <span className="text-sm font-medium">Result</span>
               <Badge variant="outline" className="text-xs ml-auto">
-                Select any phrase to look it up
+                Select any Chinese phrase to look it up
               </Badge>
             </div>
 
@@ -313,9 +353,9 @@ export default function SentenceTranslator({ currentListId }: SentenceTranslator
               <AnnotatedSentence tokens={result.tokens} onSelectionChange={handleSelectionChange} />
             </div>
 
-            {/* English translation */}
+            {/* Translation */}
             <div className="border-t pt-3">
-              <p className="text-xs text-muted-foreground mb-1">English</p>
+              <p className="text-xs text-muted-foreground mb-1">{outputLangLabel}</p>
               <p className="text-base">{result.translation}</p>
             </div>
           </CardContent>
@@ -327,7 +367,7 @@ export default function SentenceTranslator({ currentListId }: SentenceTranslator
         <SelectionPopupPanel
           popup={popup}
           onClose={() => setPopup(null)}
-          phraseListId={currentListId}
+          preferredListId={currentListId}
         />
       )}
     </div>

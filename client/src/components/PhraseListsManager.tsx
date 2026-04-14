@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { phraseListsApi, phraseLookupApi, audioApi, playAudio } from "@/lib/api";
@@ -43,7 +43,7 @@ import {
 } from "lucide-react";
 import type { PhraseList, PhraseListItem } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
-import SentenceTranslator from "./SentenceTranslator";
+import SentenceTranslator, { SelectionPopupPanel, useSelectionPopup } from "./SentenceTranslator";
 
 type ExampleSentence = { sentence: string; pinyin: string; translation: string };
 
@@ -486,6 +486,45 @@ function parseExamples(raw: string | null | undefined): ExampleSentence[] {
 }
 
 // ─── Phrase card with example sentences ───────────────────────────────────────
+// Helper: extracts CJK characters from a mouse/touch selection and fires onSelectionChange
+function useExampleSelectionHandler(
+  onSelectionChange: (chinese: string, rect: DOMRect | null) => void
+) {
+  return useCallback((e: React.MouseEvent | React.TouchEvent) => {
+    const sel = window.getSelection();
+    if (!sel || sel.isCollapsed) { onSelectionChange("", null); return; }
+    const raw = sel.toString();
+    const chinese = raw.replace(/[^\u4e00-\u9fff\u3000-\u303f\uff00-\uffef]/g, "").trim();
+    if (!chinese) { onSelectionChange("", null); return; }
+    const range = sel.getRangeAt(0);
+    onSelectionChange(chinese, range.getBoundingClientRect());
+  }, [onSelectionChange]);
+}
+
+function ExampleItem({
+  ex,
+  onSelectionChange,
+}: {
+  ex: ExampleSentence;
+  onSelectionChange: (chinese: string, rect: DOMRect | null) => void;
+}) {
+  const handleMouseUp = useExampleSelectionHandler(onSelectionChange);
+
+  return (
+    <div
+      className="rounded-md bg-muted/50 p-2 space-y-0.5 select-text cursor-text"
+      onMouseUp={handleMouseUp}
+      onTouchEnd={handleMouseUp}
+    >
+      <div className="font-chinese text-base leading-snug">{ex.sentence}</div>
+      {ex.pinyin && (
+        <div className="text-xs text-primary italic">{ex.pinyin}</div>
+      )}
+      <div className="text-xs text-foreground/70">{ex.translation}</div>
+    </div>
+  );
+}
+
 function PhraseCard({
   item,
   listId,
@@ -502,6 +541,7 @@ function PhraseCard({
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
   const examples = parseExamples(item.exampleSentences);
+  const { popup, setPopup, handleSelectionChange } = useSelectionPopup();
 
   const generateMutation = useMutation({
     mutationFn: () => phraseLookupApi.exampleSentence(item.chinese, item.english),
@@ -518,80 +558,90 @@ function PhraseCard({
   });
 
   return (
-    <Card>
-      <CardContent className="p-3">
-        <div className="flex items-center gap-2">
-          <div className="flex-1 min-w-0">
-            <div className="font-chinese text-lg leading-tight">{item.chinese}</div>
-            {item.pinyin && (
-              <div className="text-sm text-muted-foreground italic">{item.pinyin}</div>
-            )}
-            <div className="text-sm text-foreground/80">{item.english}</div>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={() => onPlay(item)}
-              disabled={playingId !== null}
-              title="Play pronunciation"
-            >
-              {playingId === item.id ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Volume2 className="h-4 w-4" />
+    <>
+      <Card>
+        <CardContent className="p-3">
+          <div className="flex items-center gap-2">
+            <div className="flex-1 min-w-0">
+              <div className="font-chinese text-lg leading-tight">{item.chinese}</div>
+              {item.pinyin && (
+                <div className="text-sm text-muted-foreground italic">{item.pinyin}</div>
               )}
-            </Button>
-            <Button variant="ghost" size="icon" onClick={() => onDelete(item.id)} title="Remove phrase">
-              <Trash2 className="h-4 w-4" />
-            </Button>
-          </div>
-        </div>
-
-        {/* Example sentences section */}
-        <div className="mt-2 pt-2 border-t">
-          <div className="flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={() => setExpanded((v) => !v)}
-              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-            >
-              {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-              {examples.length > 0 ? `${examples.length} example${examples.length !== 1 ? "s" : ""}` : "Example sentences"}
-            </button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => generateMutation.mutate()}
-              disabled={generateMutation.isPending}
-              className="h-6 px-2 text-xs"
-              title="Generate an example sentence"
-            >
-              {generateMutation.isPending ? (
-                <Loader2 className="h-3 w-3 animate-spin mr-1" />
-              ) : (
-                <Sparkles className="h-3 w-3 mr-1" />
-              )}
-              Generate
-            </Button>
-          </div>
-
-          {expanded && examples.length > 0 && (
-            <div className="mt-2 space-y-2">
-              {examples.map((ex, i) => (
-                <div key={i} className="rounded-md bg-muted/50 p-2 space-y-0.5">
-                  <div className="font-chinese text-base">{ex.sentence}</div>
-                  {ex.pinyin && (
-                    <div className="text-xs text-muted-foreground italic">{ex.pinyin}</div>
-                  )}
-                  <div className="text-xs text-foreground/70">{ex.translation}</div>
-                </div>
-              ))}
+              <div className="text-sm text-foreground/80">{item.english}</div>
             </div>
-          )}
-        </div>
-      </CardContent>
-    </Card>
+            <div className="flex items-center gap-1 shrink-0">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onPlay(item)}
+                disabled={playingId !== null}
+                title="Play pronunciation"
+              >
+                {playingId === item.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Volume2 className="h-4 w-4" />
+                )}
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => onDelete(item.id)} title="Remove phrase">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          {/* Example sentences section */}
+          <div className="mt-2 pt-2 border-t">
+            <div className="flex items-center justify-between gap-2">
+              <button
+                type="button"
+                onClick={() => setExpanded((v) => !v)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                {examples.length > 0
+                  ? `${examples.length} example${examples.length !== 1 ? "s" : ""}`
+                  : "Example sentences"}
+              </button>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => generateMutation.mutate()}
+                disabled={generateMutation.isPending}
+                className="h-6 px-2 text-xs"
+                title="Generate an example sentence"
+              >
+                {generateMutation.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                ) : (
+                  <Sparkles className="h-3 w-3 mr-1" />
+                )}
+                Generate
+              </Button>
+            </div>
+
+            {expanded && examples.length > 0 && (
+              <div className="mt-2 space-y-2">
+                <p className="text-[0.65rem] text-muted-foreground">
+                  Select any Chinese sub-phrase to look it up
+                </p>
+                {examples.map((ex, i) => (
+                  <ExampleItem key={i} ex={ex} onSelectionChange={handleSelectionChange} />
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Sub-phrase selection popup */}
+      {popup && (
+        <SelectionPopupPanel
+          popup={popup}
+          onClose={() => setPopup(null)}
+          preferredListId={listId}
+        />
+      )}
+    </>
   );
 }
 
