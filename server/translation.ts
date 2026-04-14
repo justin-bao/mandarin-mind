@@ -40,3 +40,33 @@ export async function lookupPhrase(chinese: string): Promise<{ pinyin: string; e
   const english = await translateChineseToEnglish(chinese);
   return { pinyin: pinyinResult, english };
 }
+
+/**
+ * Tokenise a Chinese sentence into per-character tokens with pinyin.
+ * Punctuation / spaces are returned with an empty pinyin string.
+ */
+export function tokenizeSentence(text: string): { char: string; pinyin: string }[] {
+  const pinyinArr = (getPinyinLib as unknown as (t: string, opts: object) => string[])(
+    text,
+    { toneType: 'symbol', type: 'array' }
+  );
+
+  return Array.from(text).map((char, i) => ({
+    char,
+    pinyin: pinyinArr[i] ?? '',
+  }));
+}
+
+/**
+ * Full sentence translation: pinyin per character + whole-sentence English.
+ */
+export async function translateSentence(text: string): Promise<{
+  tokens: { char: string; pinyin: string }[];
+  translation: string;
+}> {
+  const [tokens, translation] = await Promise.all([
+    Promise.resolve(tokenizeSentence(text)),
+    translateChineseToEnglish(text),
+  ]);
+  return { tokens, translation };
+}

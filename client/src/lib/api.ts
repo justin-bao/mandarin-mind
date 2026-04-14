@@ -118,6 +118,10 @@ export const phraseListsApi = {
     const res = await apiRequest('POST', `/api/phrase-lists/${listId}/items`, data);
     return await res.json();
   },
+  updateItem: async (listId: string, itemId: string, data: Record<string, unknown>) => {
+    const res = await apiRequest('PATCH', `/api/phrase-lists/${listId}/items/${itemId}`, data);
+    return await res.json();
+  },
   deleteItem: async (listId: string, itemId: string) => {
     const res = await apiRequest('DELETE', `/api/phrase-lists/${listId}/items/${itemId}`);
     return await res.json();
@@ -125,6 +129,24 @@ export const phraseListsApi = {
 };
 
 export const phraseLookupApi = {
+  lookup: async (chinese: string): Promise<{ pinyin: string; english: string }> => {
+    const res = await apiRequest('POST', '/api/phrases/lookup', { chinese });
+    return await res.json();
+  },
+  exampleSentence: async (chinese: string, english: string): Promise<{ sentence: string; pinyin: string; translation: string }> => {
+    const res = await apiRequest('POST', '/api/phrases/example-sentence', { chinese, english });
+    return await res.json();
+  },
+};
+
+export const translateApi = {
+  sentence: async (chinese: string): Promise<{
+    tokens: { char: string; pinyin: string }[];
+    translation: string;
+  }> => {
+    const res = await apiRequest('POST', '/api/translate/sentence', { chinese });
+    return await res.json();
+  },
   lookup: async (chinese: string): Promise<{ pinyin: string; english: string }> => {
     const res = await apiRequest('POST', '/api/phrases/lookup', { chinese });
     return await res.json();

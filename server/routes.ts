@@ -3,7 +3,7 @@ import { createServer, type Server } from "http";
 import multer from "multer";
 import { storage } from "./storage";
 import { mandarinTutorService } from "./openai";
-import { lookupPhrase } from "./translation";
+import { lookupPhrase, translateSentence } from "./translation";
 import { insertConversationSchema, insertMessageSchema, insertPracticeWordSchema, insertPhraseListSchema, insertPhraseListItemSchema } from "@shared/schema";
 
 // Configure multer for audio file uploads
@@ -263,6 +263,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch('/api/phrase-lists/:listId/items/:itemId', async (req: Request, res: Response) => {
+    try {
+      const item = await storage.updatePhraseListItem(req.params.itemId, req.body);
+      res.json(item);
+    } catch (error) {
+      console.error('Error updating phrase list item:', error);
+      res.status(400).json({ error: 'Failed to update phrase list item' });
+    }
+  });
+
   app.delete('/api/phrase-lists/:listId/items/:itemId', async (req: Request, res: Response) => {
     try {
       await storage.deletePhraseListItem(req.params.itemId);
@@ -270,6 +280,36 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error deleting phrase list item:', error);
       res.status(500).json({ error: 'Failed to delete phrase list item' });
+    }
+  });
+
+  // Generate an example sentence for a phrase using OpenAI
+  app.post('/api/phrases/example-sentence', async (req: Request, res: Response) => {
+    try {
+      const { chinese, english } = req.body;
+      if (!chinese || !english) {
+        return res.status(400).json({ error: 'chinese and english are required' });
+      }
+      const result = await mandarinTutorService.generateExampleSentence(chinese.trim(), english.trim());
+      res.json(result);
+    } catch (error) {
+      console.error('Error generating example sentence:', error);
+      res.status(500).json({ error: 'Failed to generate example sentence' });
+    }
+  });
+
+  // Sentence translation: tokenise + translate a full Chinese sentence (free services)
+  app.post('/api/translate/sentence', async (req: Request, res: Response) => {
+    try {
+      const { chinese } = req.body;
+      if (!chinese || typeof chinese !== 'string') {
+        return res.status(400).json({ error: 'chinese text is required' });
+      }
+      const result = await translateSentence(chinese.trim());
+      res.json(result);
+    } catch (error) {
+      console.error('Error translating sentence:', error);
+      res.status(500).json({ error: 'Failed to translate sentence' });
     }
   });
 

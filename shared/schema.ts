@@ -52,6 +52,8 @@ export const phraseListItems = pgTable("phrase_list_items", {
   chinese: text("chinese").notNull(),
   pinyin: text("pinyin"),
   english: text("english").notNull(),
+  // JSON-serialised array of { sentence, pinyin, translation } objects
+  exampleSentences: text("example_sentences"),
   createdAt: timestamp("created_at").defaultNow(),
 });
 

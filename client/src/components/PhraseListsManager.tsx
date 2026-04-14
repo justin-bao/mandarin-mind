@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { phraseListsApi, phraseLookupApi, audioApi, playAudio } from "@/lib/api";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -35,11 +35,17 @@ import {
   Search,
   FolderOpen,
   Pencil,
-  Check,
   X,
+  ChevronDown,
+  ChevronUp,
+  Sparkles,
+  Languages,
 } from "lucide-react";
 import type { PhraseList, PhraseListItem } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import SentenceTranslator from "./SentenceTranslator";
+
+type ExampleSentence = { sentence: string; pinyin: string; translation: string };
 
 // ─── Common phrase dictionary for autocomplete ───────────────────────────────
 const PHRASE_DICT: { chinese: string; pinyin: string; english: string }[] = [
@@ -474,6 +480,121 @@ interface ListDetailProps {
   onStartPractice: (words: { chinese: string; pinyin: string; english: string }[]) => void;
 }
 
+function parseExamples(raw: string | null | undefined): ExampleSentence[] {
+  if (!raw) return [];
+  try { return JSON.parse(raw) as ExampleSentence[]; } catch { return []; }
+}
+
+// ─── Phrase card with example sentences ───────────────────────────────────────
+function PhraseCard({
+  item,
+  listId,
+  playingId,
+  onPlay,
+  onDelete,
+}: {
+  item: PhraseListItem;
+  listId: string;
+  playingId: string | null;
+  onPlay: (item: PhraseListItem) => void;
+  onDelete: (id: string) => void;
+}) {
+  const { toast } = useToast();
+  const [expanded, setExpanded] = useState(false);
+  const examples = parseExamples(item.exampleSentences);
+
+  const generateMutation = useMutation({
+    mutationFn: () => phraseLookupApi.exampleSentence(item.chinese, item.english),
+    onSuccess: (newExample) => {
+      const updated = [...examples, newExample];
+      phraseListsApi.updateItem(listId, item.id, {
+        exampleSentences: JSON.stringify(updated),
+      }).then(() => {
+        queryClient.invalidateQueries({ queryKey: ["/api/phrase-lists", listId, "items"] });
+      });
+      setExpanded(true);
+    },
+    onError: () => toast({ description: "Failed to generate example", variant: "destructive" }),
+  });
+
+  return (
+    <Card>
+      <CardContent className="p-3">
+        <div className="flex items-center gap-2">
+          <div className="flex-1 min-w-0">
+            <div className="font-chinese text-lg leading-tight">{item.chinese}</div>
+            {item.pinyin && (
+              <div className="text-sm text-muted-foreground italic">{item.pinyin}</div>
+            )}
+            <div className="text-sm text-foreground/80">{item.english}</div>
+          </div>
+          <div className="flex items-center gap-1 shrink-0">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => onPlay(item)}
+              disabled={playingId !== null}
+              title="Play pronunciation"
+            >
+              {playingId === item.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Volume2 className="h-4 w-4" />
+              )}
+            </Button>
+            <Button variant="ghost" size="icon" onClick={() => onDelete(item.id)} title="Remove phrase">
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+
+        {/* Example sentences section */}
+        <div className="mt-2 pt-2 border-t">
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+            >
+              {expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+              {examples.length > 0 ? `${examples.length} example${examples.length !== 1 ? "s" : ""}` : "Example sentences"}
+            </button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => generateMutation.mutate()}
+              disabled={generateMutation.isPending}
+              className="h-6 px-2 text-xs"
+              title="Generate an example sentence"
+            >
+              {generateMutation.isPending ? (
+                <Loader2 className="h-3 w-3 animate-spin mr-1" />
+              ) : (
+                <Sparkles className="h-3 w-3 mr-1" />
+              )}
+              Generate
+            </Button>
+          </div>
+
+          {expanded && examples.length > 0 && (
+            <div className="mt-2 space-y-2">
+              {examples.map((ex, i) => (
+                <div key={i} className="rounded-md bg-muted/50 p-2 space-y-0.5">
+                  <div className="font-chinese text-base">{ex.sentence}</div>
+                  {ex.pinyin && (
+                    <div className="text-xs text-muted-foreground italic">{ex.pinyin}</div>
+                  )}
+                  <div className="text-xs text-foreground/70">{ex.translation}</div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 function ListDetail({ list, onBack, onStartPractice }: ListDetailProps) {
   const { toast } = useToast();
   const [addOpen, setAddOpen] = useState(false);
@@ -570,40 +691,14 @@ function ListDetail({ list, onBack, onStartPractice }: ListDetailProps) {
       ) : (
         <div className="space-y-2">
           {items.map((item) => (
-            <Card key={item.id}>
-              <CardContent className="p-3 flex items-center gap-3">
-                <div className="flex-1 min-w-0">
-                  <div className="font-chinese text-lg leading-tight">{item.chinese}</div>
-                  {item.pinyin && (
-                    <div className="text-sm text-muted-foreground italic">{item.pinyin}</div>
-                  )}
-                  <div className="text-sm text-foreground/80">{item.english}</div>
-                </div>
-                <div className="flex items-center gap-1 shrink-0">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handlePlay(item)}
-                    disabled={playingId !== null}
-                    title="Play pronunciation"
-                  >
-                    {playingId === item.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Volume2 className="h-4 w-4" />
-                    )}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => setDeleteItemId(item.id)}
-                    title="Remove phrase"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
+            <PhraseCard
+              key={item.id}
+              item={item}
+              listId={list.id}
+              playingId={playingId}
+              onPlay={handlePlay}
+              onDelete={(id) => setDeleteItemId(id)}
+            />
           ))}
         </div>
       )}
@@ -641,6 +736,7 @@ interface PhraseListsManagerProps {
 
 export default function PhraseListsManager({ onStartPractice }: PhraseListsManagerProps) {
   const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState<"lists" | "translate">("lists");
   const [createOpen, setCreateOpen] = useState(false);
   const [selectedList, setSelectedList] = useState<PhraseListWithCount | null>(null);
   const [deleteListId, setDeleteListId] = useState<string | null>(null);
@@ -676,6 +772,42 @@ export default function PhraseListsManager({ onStartPractice }: PhraseListsManag
 
   return (
     <div className="space-y-4">
+      {/* Tab bar */}
+      <div className="flex items-center gap-1 border-b">
+        <button
+          type="button"
+          onClick={() => setActiveTab("lists")}
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "lists"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <FolderOpen className="h-4 w-4" />
+          My Lists
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("translate")}
+          className={`flex items-center gap-1.5 px-3 py-2 text-sm font-medium border-b-2 transition-colors ${
+            activeTab === "translate"
+              ? "border-primary text-primary"
+              : "border-transparent text-muted-foreground hover:text-foreground"
+          }`}
+        >
+          <Languages className="h-4 w-4" />
+          Translate
+        </button>
+      </div>
+
+      {/* Translate tab */}
+      {activeTab === "translate" && (
+        <SentenceTranslator />
+      )}
+
+      {/* Lists tab */}
+      {activeTab === "lists" && <>
+
       {/* Header */}
       <div className="flex items-center justify-between gap-2 flex-wrap">
         <div>
@@ -758,6 +890,7 @@ export default function PhraseListsManager({ onStartPractice }: PhraseListsManag
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      </>}
     </div>
   );
 }

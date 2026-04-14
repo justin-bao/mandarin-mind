@@ -27,6 +27,7 @@ export interface IStorage {
   // Phrase List Items
   getPhraseListItems(listId: string): Promise<PhraseListItem[]>;
   createPhraseListItem(item: InsertPhraseListItem): Promise<PhraseListItem>;
+  updatePhraseListItem(id: string, updates: Partial<PhraseListItem>): Promise<PhraseListItem>;
   deletePhraseListItem(id: string): Promise<void>;
 }
 
@@ -204,10 +205,19 @@ export class MemStorage implements IStorage {
       ...insertItem,
       id,
       pinyin: insertItem.pinyin ?? null,
+      exampleSentences: insertItem.exampleSentences ?? null,
       createdAt: new Date(),
     };
     this.phraseListItems.set(id, item);
     return item;
+  }
+
+  async updatePhraseListItem(id: string, updates: Partial<PhraseListItem>): Promise<PhraseListItem> {
+    const existing = this.phraseListItems.get(id);
+    if (!existing) throw new Error(`Phrase list item ${id} not found`);
+    const updated = { ...existing, ...updates };
+    this.phraseListItems.set(id, updated);
+    return updated;
   }
 
   async deletePhraseListItem(id: string): Promise<void> {

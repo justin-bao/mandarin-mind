@@ -128,6 +128,38 @@ ENGLISH: [translation here]`
     }
   }
 
+  async generateExampleSentence(
+    chinese: string,
+    english: string
+  ): Promise<{ sentence: string; pinyin: string; translation: string }> {
+    try {
+      const completion = await openai.chat.completions.create({
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'user',
+            content: `Create one natural example sentence in Mandarin Chinese that clearly uses the phrase "${chinese}" (${english}). The sentence should be suitable for a language learner.
+
+Respond in exactly this format:
+SENTENCE: [Chinese sentence only]
+PINYIN: [full pinyin with tone marks]
+ENGLISH: [natural English translation]`,
+          },
+        ],
+        temperature: 0.8,
+        max_tokens: 200,
+      });
+      const text = completion.choices[0]?.message?.content ?? '';
+      const sentence = text.match(/SENTENCE:\s*(.+)/)?.[1]?.trim() ?? '';
+      const pinyin   = text.match(/PINYIN:\s*(.+)/)?.[1]?.trim()   ?? '';
+      const translation = text.match(/ENGLISH:\s*(.+)/)?.[1]?.trim() ?? '';
+      return { sentence, pinyin, translation };
+    } catch (error) {
+      console.error('Example sentence generation error:', error);
+      throw new Error('Failed to generate example sentence');
+    }
+  }
+
   private buildSystemPrompt(context: ConversationContext): string {
     let prompt = `You are a helpful Mandarin Chinese language tutor. You should:
 1. Respond naturally in Mandarin Chinese
