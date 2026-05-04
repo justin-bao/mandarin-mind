@@ -1,11 +1,11 @@
-import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { 
   MessageCircle, 
   GraduationCap, 
   History, 
-  Settings
+  Settings,
+  Layers,
 } from "lucide-react";
 
 interface NavigationTab {
@@ -31,6 +31,11 @@ const tabs: NavigationTab[] = [
     id: 'practice',
     label: 'Practice',
     icon: <GraduationCap className="h-5 w-5" />
+  },
+  {
+    id: 'flashcards',
+    label: 'Flashcards',
+    icon: <Layers className="h-5 w-5" />
   },
   {
     id: 'history',

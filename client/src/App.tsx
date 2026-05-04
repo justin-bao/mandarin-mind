@@ -14,6 +14,7 @@ import ConversationHistory from "@/components/ConversationHistory";
 import NavigationTabs from "@/components/NavigationTabs";
 import Settings from "@/components/Settings";
 import ThemeToggle from "@/components/ThemeToggle";
+import Flashcards from "@/components/Flashcards";
 
 function Router() {
   return (
@@ -135,6 +136,14 @@ function MainApp() {
       return (
         <div className="p-4">
           <PhraseListsManager onStartPractice={handleStartPractice} />
+        </div>
+      );
+    }
+
+    if (activeTab === 'flashcards') {
+      return (
+        <div className="p-4">
+          <Flashcards />
         </div>
       );
     }
