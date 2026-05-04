@@ -288,7 +288,7 @@ function SetupScreen({ onStart }: SetupProps) {
             Discover
           </div>
           <div className="text-xs text-muted-foreground mt-0.5">
-            Explore new vocab by topic
+            HSK vocab by level
           </div>
         </button>
         <button
@@ -316,7 +316,7 @@ function SetupScreen({ onStart }: SetupProps) {
       {mode === "discover" && (
         <div className="space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <span className="text-sm font-medium">Categories</span>
+            <span className="text-sm font-medium">HSK Levels</span>
             <button
               type="button"
               onClick={toggleAllCategories}
