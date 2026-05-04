@@ -96,3 +96,41 @@ export type Message = typeof messages.$inferSelect;
 export type PracticeWord = typeof practiceWords.$inferSelect;
 export type PhraseList = typeof phraseLists.$inferSelect;
 export type PhraseListItem = typeof phraseListItems.$inferSelect;
+
+// ─── Media Items ──────────────────────────────────────────────────────────────
+
+export interface OcrBlock {
+  text: string;
+  x: number;    // % of image width
+  y: number;    // % of image height
+  width: number;
+  height: number;
+  confidence: number;
+}
+
+export interface Caption {
+  startMs: number;
+  endMs: number;
+  chinese: string;
+  english: string;
+}
+
+export interface MediaItem {
+  id: string;
+  type: 'image' | 'video' | 'audio';
+  originalName: string;
+  mimeType: string;
+  fileUrl: string;       // e.g. /uploads/uuid-filename.jpg
+  uploadedAt: Date;
+  ocrBlocks: OcrBlock[] | null;
+  captions: Caption[] | null;
+}
+
+export interface InsertMediaItem {
+  type: 'image' | 'video' | 'audio';
+  originalName: string;
+  mimeType: string;
+  fileUrl: string;
+  ocrBlocks?: OcrBlock[] | null;
+  captions?: Caption[] | null;
+}

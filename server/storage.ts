@@ -1,4 +1,4 @@
-import { type Conversation, type InsertConversation, type Message, type InsertMessage, type PracticeWord, type InsertPracticeWord, type PhraseList, type InsertPhraseList, type PhraseListItem, type InsertPhraseListItem } from "@shared/schema";
+import { type Conversation, type InsertConversation, type Message, type InsertMessage, type PracticeWord, type InsertPracticeWord, type PhraseList, type InsertPhraseList, type PhraseListItem, type InsertPhraseListItem, type MediaItem, type InsertMediaItem } from "@shared/schema";
 import { randomUUID } from "crypto";
 
 export interface IStorage {
@@ -29,6 +29,12 @@ export interface IStorage {
   createPhraseListItem(item: InsertPhraseListItem): Promise<PhraseListItem>;
   updatePhraseListItem(id: string, updates: Partial<PhraseListItem>): Promise<PhraseListItem>;
   deletePhraseListItem(id: string): Promise<void>;
+
+  // Media Items
+  getMediaItems(): Promise<MediaItem[]>;
+  getMediaItem(id: string): Promise<MediaItem | undefined>;
+  createMediaItem(item: InsertMediaItem): Promise<MediaItem>;
+  deleteMediaItem(id: string): Promise<void>;
 }
 
 export class MemStorage implements IStorage {
@@ -37,6 +43,7 @@ export class MemStorage implements IStorage {
   private practiceWords: Map<string, PracticeWord>;
   private phraseLists: Map<string, PhraseList>;
   private phraseListItems: Map<string, PhraseListItem>;
+  private mediaItems: Map<string, MediaItem>;
 
   constructor() {
     this.conversations = new Map();
@@ -44,6 +51,7 @@ export class MemStorage implements IStorage {
     this.practiceWords = new Map();
     this.phraseLists = new Map();
     this.phraseListItems = new Map();
+    this.mediaItems = new Map();
   }
 
   // Conversations
@@ -222,6 +230,37 @@ export class MemStorage implements IStorage {
 
   async deletePhraseListItem(id: string): Promise<void> {
     this.phraseListItems.delete(id);
+  }
+
+  // Media Items
+  async getMediaItems(): Promise<MediaItem[]> {
+    return Array.from(this.mediaItems.values()).sort(
+      (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
+    );
+  }
+
+  async getMediaItem(id: string): Promise<MediaItem | undefined> {
+    return this.mediaItems.get(id);
+  }
+
+  async createMediaItem(insertItem: InsertMediaItem): Promise<MediaItem> {
+    const id = randomUUID();
+    const item: MediaItem = {
+      id,
+      type: insertItem.type,
+      originalName: insertItem.originalName,
+      mimeType: insertItem.mimeType,
+      fileUrl: insertItem.fileUrl,
+      uploadedAt: new Date(),
+      ocrBlocks: insertItem.ocrBlocks ?? null,
+      captions: insertItem.captions ?? null,
+    };
+    this.mediaItems.set(id, item);
+    return item;
+  }
+
+  async deleteMediaItem(id: string): Promise<void> {
+    this.mediaItems.delete(id);
   }
 }
 
