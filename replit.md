@@ -2,7 +2,7 @@
 
 ## Overview
 
-This is a Mandarin language learning application that provides interactive conversation practice with an AI tutor. The app focuses on speech-to-speech interaction, allowing users to practice pronunciation and conversation skills through real-time audio transcription and AI-generated responses. Users can engage in topic-based conversations, practice with custom word lists, and track their learning progress through conversation history.
+This is a Mandarin language learning application that provides interactive conversation practice with an AI tutor. The app focuses on speech-to-speech interaction, allowing users to practice pronunciation and conversation skills through real-time audio transcription and AI-generated responses. Users can engage in topic-based conversations, practice with custom word lists, track their learning progress through conversation history, study with HSK-level flashcards, and analyze media (images + video/audio) for language learning.
 
 ## User Preferences
 
@@ -22,12 +22,14 @@ Preferred communication style: Simple, everyday language.
 - RESTful API design with structured route handlers
 - Memory-based storage implementation with interface for future database integration
 - Middleware for request logging and error handling
-- File upload handling via multer for audio processing
+- File upload handling via multer: audio (memory, 10 MB) for conversation; image/video/audio (disk, 100 MB) for media mode
+- Static file serving from server/uploads/ at /uploads/ route
 
 **Audio Processing**
 - Browser-based audio recording using MediaRecorder API
 - WebM audio format with Opus codec for optimal quality and compression
-- Audio transcription through OpenAI Whisper API
+- Audio transcription through OpenAI Whisper API (conversation mode)
+- Groq Whisper API (whisper-large-v3-turbo) for media video/audio captions
 - Real-time speech-to-text conversion for user input
 
 **AI Integration**
@@ -35,12 +37,23 @@ Preferred communication style: Simple, everyday language.
 - Context-aware conversation management with topic and difficulty tracking
 - Structured response generation including Chinese text, pinyin, and English translations
 - Conversation history tracking for context continuity
+- GPT-4o-mini for caption translation (Chinese ↔ English per segment)
+
+**Media Mode (OCR + Captions)**
+- Image OCR via Tesseract.js (server-side, chi_sim+eng, line-level bounding boxes as % coordinates)
+- Tappable text chip overlay on images — tap any detected block to translate + add to phrase list
+- Video/audio captioning: Groq Whisper transcribes → GPT-4o-mini translates per segment
+- Synchronized caption player with auto-scroll and active-line highlight
+- All media persisted in-memory (MediaItem) with history list showing thumbnails/icons
+- Translate any caption → detailed character-by-character pinyin breakdown
+- "Add to phrase list" action available from both OCR viewer and caption player
 
 **Data Models**
 - Conversations: Track learning sessions with topics, difficulty levels, and metadata
 - Messages: Store conversation exchanges with multilingual content (Chinese, pinyin, English)
 - Practice Words: Custom vocabulary lists for targeted learning
-- Database schema designed for PostgreSQL with Drizzle ORM
+- Phrase Lists + Items: Named collections with AI-powered pinyin/English auto-fill and example sentences
+- MediaItem: In-memory model with id, type (image|video|audio), fileUrl, ocrBlocks (JSON), captions (JSON)
 
 **Design System**
 - Custom color palette optimized for learning (teal-based primary colors)
@@ -58,6 +71,8 @@ Preferred communication style: Simple, everyday language.
   - Autocomplete/autosuggest on Chinese input using a built-in 100+ phrase dictionary
   - AI-powered pinyin + English auto-population via lookup endpoint
   - Practice sessions launchable from any list
+- Flashcards: HSK 1–6 levels (~2,000 words total) with flip animation
+- Media mode: scan images for Chinese text (OCR) or upload videos/audio for bilingual captions
 - Progress tracking through conversation metrics
 
 ## External Dependencies
@@ -80,9 +95,13 @@ Preferred communication style: Simple, everyday language.
 - Wouter for lightweight client-side routing
 
 **Audio and AI Services**
-- OpenAI API for speech transcription (Whisper) and text generation (GPT)
+- OpenAI API for speech transcription (Whisper) and text generation (GPT-4 / GPT-4o-mini)
+- Groq API (whisper-large-v3-turbo) for fast video/audio transcription with timestamps
 - Browser MediaRecorder API for audio capture
 - Multer for server-side file upload handling
+
+**OCR**
+- tesseract.js for server-side image OCR (Chinese Simplified + English)
 
 **Development and Production**
 - tsx for TypeScript execution in development
@@ -94,3 +113,8 @@ Preferred communication style: Simple, everyday language.
 - PostgreSQL database (configured for Neon Database)
 - connect-pg-simple for session storage
 - Drizzle Kit for database migrations and schema management
+
+## Environment Variables Required
+- OPENAI_API_KEY — OpenAI GPT + Whisper
+- GROQ_API_KEY — Groq Whisper for media captions
+- SESSION_SECRET — Express session

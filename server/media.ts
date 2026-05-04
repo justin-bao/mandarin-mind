@@ -1,0 +1,127 @@
+import fs from "fs";
+import path from "path";
+import Groq from "groq-sdk";
+import OpenAI from "openai";
+import type { OcrBlock, Caption } from "@shared/schema";
+
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+// ─── OCR via Tesseract.js ─────────────────────────────────────────────────────
+
+export async function runOCR(filePath: string): Promise<OcrBlock[]> {
+  // Dynamic import — tesseract.js is ESM-compatible
+  const Tesseract = await import("tesseract.js");
+  const worker = await Tesseract.createWorker(["chi_sim", "eng"]);
+
+  try {
+    const { data } = await worker.recognize(filePath);
+
+    // Use word-level bounding boxes for fine-grained tapping
+    const blocks: OcrBlock[] = [];
+
+    // Get image dimensions from the result
+    const imgWidth = data.blocks?.[0]?.bbox
+      ? (data as any).width ?? 800
+      : 800;
+    const imgHeight = (data as any).height ?? 600;
+
+    for (const block of data.blocks ?? []) {
+      for (const para of block.paragraphs ?? []) {
+        for (const line of para.lines ?? []) {
+          // Collect words in this line into one block
+          const words = line.words ?? [];
+          if (!words.length) continue;
+
+          const lineText = words.map((w: any) => w.text).join(" ").trim();
+          if (!lineText) continue;
+
+          // Average confidence across words
+          const conf =
+            words.reduce((s: number, w: any) => s + (w.confidence ?? 0), 0) /
+            words.length;
+
+          if (conf < 30) continue; // skip very low confidence
+
+          // Bounding box for the whole line
+          const bbox = line.bbox;
+          blocks.push({
+            text: lineText,
+            x: (bbox.x0 / imgWidth) * 100,
+            y: (bbox.y0 / imgHeight) * 100,
+            width: ((bbox.x1 - bbox.x0) / imgWidth) * 100,
+            height: ((bbox.y1 - bbox.y0) / imgHeight) * 100,
+            confidence: Math.round(conf),
+          });
+        }
+      }
+    }
+
+    return blocks;
+  } finally {
+    await worker.terminate();
+  }
+}
+
+// ─── Audio/Video transcription + caption generation ──────────────────────────
+
+export async function generateCaptions(filePath: string, mimeType: string): Promise<Caption[]> {
+  // 1. Transcribe with Groq Whisper
+  const fileStream = fs.createReadStream(filePath);
+  const fileName = path.basename(filePath);
+
+  const transcription = await groq.audio.transcriptions.create({
+    file: fileStream,
+    model: "whisper-large-v3-turbo",
+    response_format: "verbose_json",
+    timestamp_granularities: ["segment"],
+  } as any);
+
+  const segments: Array<{ start: number; end: number; text: string }> =
+    (transcription as any).segments ?? [];
+
+  if (!segments.length) return [];
+
+  // 2. Detect language from first segment text
+  const sampleText = segments
+    .slice(0, 5)
+    .map((s) => s.text)
+    .join(" ");
+  const isChinese = /[\u4e00-\u9fff]/.test(sampleText);
+
+  // 3. Translate with gpt-4o-mini
+  const segmentList = segments
+    .map((s, i) => `${i}: ${s.text.trim()}`)
+    .join("\n");
+
+  const translationPrompt = isChinese
+    ? `You are a professional translator. Below are numbered segments of Chinese text. For each segment, provide the English translation. Respond with one line per segment in the format: INDEX|ENGLISH\n\n${segmentList}`
+    : `You are a professional translator. Below are numbered segments of text. For each segment, provide the Chinese (Simplified) translation. Respond with one line per segment in the format: INDEX|CHINESE\n\n${segmentList}`;
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4o-mini",
+    messages: [{ role: "user", content: translationPrompt }],
+    temperature: 0.1,
+    max_tokens: 2000,
+  });
+
+  const translationText = completion.choices[0]?.message?.content ?? "";
+  const translationMap = new Map<number, string>();
+  for (const line of translationText.split("\n")) {
+    const match = line.match(/^(\d+)\|(.+)/);
+    if (match) {
+      translationMap.set(parseInt(match[1]), match[2].trim());
+    }
+  }
+
+  // 4. Build caption objects
+  return segments.map((seg, i) => {
+    const translated = translationMap.get(i) ?? "";
+    return {
+      startMs: Math.round(seg.start * 1000),
+      endMs: Math.round(seg.end * 1000),
+      chinese: isChinese ? seg.text.trim() : translated,
+      english: isChinese ? translated : seg.text.trim(),
+    };
+  });
+}

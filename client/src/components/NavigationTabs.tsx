@@ -6,6 +6,7 @@ import {
   History, 
   Settings,
   Layers,
+  Film,
 } from "lucide-react";
 
 interface NavigationTab {
@@ -36,6 +37,11 @@ const tabs: NavigationTab[] = [
     id: 'flashcards',
     label: 'Flashcards',
     icon: <Layers className="h-5 w-5" />
+  },
+  {
+    id: 'media',
+    label: 'Media',
+    icon: <Film className="h-5 w-5" />
   },
   {
     id: 'history',

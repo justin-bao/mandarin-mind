@@ -15,6 +15,7 @@ import NavigationTabs from "@/components/NavigationTabs";
 import Settings from "@/components/Settings";
 import ThemeToggle from "@/components/ThemeToggle";
 import Flashcards from "@/components/Flashcards";
+import MediaMode from "@/components/MediaMode";
 
 function Router() {
   return (
@@ -146,6 +147,10 @@ function MainApp() {
           <Flashcards />
         </div>
       );
+    }
+
+    if (activeTab === 'media') {
+      return <MediaMode />;
     }
 
     if (activeTab === 'history') {
