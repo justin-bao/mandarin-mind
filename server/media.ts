@@ -7,43 +7,85 @@ import type { OcrBlock, Caption } from "@shared/schema";
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// ─── Tesseract types ──────────────────────────────────────────────────────────
+
+interface TesseractBbox {
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+}
+
+interface TesseractWord {
+  text: string;
+  confidence: number;
+  bbox: TesseractBbox;
+}
+
+interface TesseractLine {
+  words: TesseractWord[];
+  bbox: TesseractBbox;
+}
+
+interface TesseractParagraph {
+  lines: TesseractLine[];
+}
+
+interface TesseractBlock {
+  paragraphs: TesseractParagraph[];
+  bbox: TesseractBbox;
+}
+
+interface TesseractData {
+  blocks: TesseractBlock[];
+  width: number;
+  height: number;
+}
+
+// ─── Groq types ───────────────────────────────────────────────────────────────
+
+interface GroqSegment {
+  start: number;
+  end: number;
+  text: string;
+}
+
+interface GroqVerboseTranscription {
+  segments: GroqSegment[];
+  language: string;
+  duration: number;
+  text: string;
+}
+
 // ─── OCR via Tesseract.js ─────────────────────────────────────────────────────
 
 export async function runOCR(filePath: string): Promise<OcrBlock[]> {
-  // Dynamic import — tesseract.js is ESM-compatible
   const Tesseract = await import("tesseract.js");
   const worker = await Tesseract.createWorker(["chi_sim", "eng"]);
 
   try {
     const { data } = await worker.recognize(filePath);
+    const td = data as unknown as TesseractData;
 
-    // Use word-level bounding boxes for fine-grained tapping
+    const imgWidth = td.width > 0 ? td.width : 800;
+    const imgHeight = td.height > 0 ? td.height : 600;
+
     const blocks: OcrBlock[] = [];
 
-    // Get image dimensions from the result
-    const imgWidth = data.blocks?.[0]?.bbox
-      ? (data as any).width ?? 800
-      : 800;
-    const imgHeight = (data as any).height ?? 600;
-
-    for (const block of data.blocks ?? []) {
+    for (const block of td.blocks ?? []) {
       for (const para of block.paragraphs ?? []) {
         for (const line of para.lines ?? []) {
-          // Collect words in this line into one block
           const words = line.words ?? [];
           if (!words.length) continue;
 
-          const lineText = words.map((w: any) => w.text).join(" ").trim();
+          const lineText = words.map((w) => w.text).join(" ").trim();
           if (!lineText) continue;
 
-          // Average confidence across words
           const conf =
-            words.reduce((s: number, w: any) => s + (w.confidence ?? 0), 0) /
-            words.length;
+            words.reduce((s, w) => s + (w.confidence ?? 0), 0) / words.length;
 
-          if (conf < 30) continue; // skip very low confidence
+          if (conf < 30) continue;
 
-          // Bounding box for the whole line
           const bbox = line.bbox;
           blocks.push({
             text: lineText,
@@ -65,31 +107,31 @@ export async function runOCR(filePath: string): Promise<OcrBlock[]> {
 
 // ─── Audio/Video transcription + caption generation ──────────────────────────
 
-export async function generateCaptions(filePath: string, mimeType: string): Promise<Caption[]> {
-  // 1. Transcribe with Groq Whisper
+export async function generateCaptions(filePath: string): Promise<Caption[]> {
   const fileStream = fs.createReadStream(filePath);
-  const fileName = path.basename(filePath);
 
-  const transcription = await groq.audio.transcriptions.create({
+  // groq-sdk types the response as SpeechCreateParams but verbose_json returns
+  // a richer object at runtime — cast through unknown to our typed interface.
+  const rawTranscription = await groq.audio.transcriptions.create({
     file: fileStream,
     model: "whisper-large-v3-turbo",
     response_format: "verbose_json",
     timestamp_granularities: ["segment"],
-  } as any);
+  });
 
-  const segments: Array<{ start: number; end: number; text: string }> =
-    (transcription as any).segments ?? [];
+  const transcription = rawTranscription as unknown as GroqVerboseTranscription;
+  const segments = transcription.segments ?? [];
 
   if (!segments.length) return [];
 
-  // 2. Detect language from first segment text
+  // Detect language from first few segments
   const sampleText = segments
     .slice(0, 5)
     .map((s) => s.text)
     .join(" ");
   const isChinese = /[\u4e00-\u9fff]/.test(sampleText);
 
-  // 3. Translate with gpt-4o-mini
+  // Translate all segments with gpt-4o-mini
   const segmentList = segments
     .map((s, i) => `${i}: ${s.text.trim()}`)
     .join("\n");
@@ -110,11 +152,10 @@ export async function generateCaptions(filePath: string, mimeType: string): Prom
   for (const line of translationText.split("\n")) {
     const match = line.match(/^(\d+)\|(.+)/);
     if (match) {
-      translationMap.set(parseInt(match[1]), match[2].trim());
+      translationMap.set(parseInt(match[1], 10), match[2].trim());
     }
   }
 
-  // 4. Build caption objects
   return segments.map((seg, i) => {
     const translated = translationMap.get(i) ?? "";
     return {

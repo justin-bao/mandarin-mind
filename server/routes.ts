@@ -50,11 +50,11 @@ const mediaUpload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Serve uploaded files statically
-  app.use("/uploads", (req, res, next) => {
+  // Serve uploaded files — cache header middleware then pass-through
+  app.use("/uploads", (req: Request, res: Response, next) => {
     res.setHeader("Cache-Control", "public, max-age=86400");
     next();
-  }, ((_req: Request, _res: Response, next: any) => next()) as any);
+  });
 
   // ─── Conversations ────────────────────────────────────────────────────────
   app.get("/api/conversations", async (req: Request, res: Response) => {
@@ -356,8 +356,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const item = await storage.getMediaItem(req.params.id);
       if (!item) return res.status(404).json({ error: "Media item not found" });
 
-      // Delete file from disk
-      const filePath = path.join(process.cwd(), item.fileUrl.replace(/^\//, ""));
+      // Delete file from disk — fileUrl is always "/uploads/<filename>"
+      const filePath = path.join(UPLOADS_DIR, path.basename(item.fileUrl));
       try {
         fs.unlinkSync(filePath);
       } catch {
@@ -373,19 +373,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── Media: upload image (OCR) ────────────────────────────────────────────
   app.post("/api/media/upload/image", mediaUpload.single("file"), async (req: Request, res: Response) => {
+    let uploadedPath: string | undefined;
     try {
       if (!req.file) return res.status(400).json({ error: "No file provided" });
+      uploadedPath = req.file.path;
 
       const fileUrl = `/uploads/${req.file.filename}`;
-      const filePath = req.file.path;
 
-      // Run Tesseract OCR
-      let ocrBlocks = null;
-      try {
-        ocrBlocks = await runOCR(filePath);
-      } catch (ocrErr) {
-        console.error("OCR error (continuing without blocks):", ocrErr);
-      }
+      // OCR errors propagate to the client — file is cleaned up on failure
+      const ocrBlocks = await runOCR(uploadedPath);
 
       const item = await storage.createMediaItem({
         type: "image",
@@ -397,26 +393,28 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json(item);
     } catch (error) {
-      console.error("Image upload error:", error);
-      res.status(500).json({ error: "Failed to process image" });
+      console.error("Image upload/OCR error:", error);
+      // Clean up the orphaned file on failure
+      if (uploadedPath) {
+        try { fs.unlinkSync(uploadedPath); } catch { /* already gone */ }
+      }
+      const message = error instanceof Error ? error.message : "Failed to process image";
+      res.status(500).json({ error: message });
     }
   });
 
   // ─── Media: upload video/audio (captions) ────────────────────────────────
   app.post("/api/media/upload/video", mediaUpload.single("file"), async (req: Request, res: Response) => {
+    let uploadedPath: string | undefined;
     try {
       if (!req.file) return res.status(400).json({ error: "No file provided" });
+      uploadedPath = req.file.path;
 
       const fileUrl = `/uploads/${req.file.filename}`;
-      const filePath = req.file.path;
       const isVideo = req.file.mimetype.startsWith("video/");
 
-      let captions = null;
-      try {
-        captions = await generateCaptions(filePath, req.file.mimetype);
-      } catch (captionErr) {
-        console.error("Caption generation error (continuing without captions):", captionErr);
-      }
+      // Caption errors propagate to the client — file is cleaned up on failure
+      const captions = await generateCaptions(uploadedPath);
 
       const item = await storage.createMediaItem({
         type: isVideo ? "video" : "audio",
@@ -429,7 +427,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json(item);
     } catch (error) {
       console.error("Video/audio upload error:", error);
-      res.status(500).json({ error: "Failed to process media file" });
+      if (uploadedPath) {
+        try { fs.unlinkSync(uploadedPath); } catch { /* already gone */ }
+      }
+      const message = error instanceof Error ? error.message : "Failed to process media file";
+      res.status(500).json({ error: message });
     }
   });
 
