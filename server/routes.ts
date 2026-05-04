@@ -376,6 +376,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let uploadedPath: string | undefined;
     try {
       if (!req.file) return res.status(400).json({ error: "No file provided" });
+      if (!req.file.mimetype.startsWith("image/")) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: "Only image files are accepted by this endpoint" });
+      }
       uploadedPath = req.file.path;
 
       const fileUrl = `/uploads/${req.file.filename}`;
@@ -408,6 +412,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     let uploadedPath: string | undefined;
     try {
       if (!req.file) return res.status(400).json({ error: "No file provided" });
+      if (!req.file.mimetype.startsWith("video/") && !req.file.mimetype.startsWith("audio/")) {
+        fs.unlinkSync(req.file.path);
+        return res.status(400).json({ error: "Only video or audio files are accepted by this endpoint" });
+      }
       uploadedPath = req.file.path;
 
       const fileUrl = `/uploads/${req.file.filename}`;

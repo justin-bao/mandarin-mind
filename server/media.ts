@@ -119,8 +119,16 @@ export async function generateCaptions(filePath: string): Promise<Caption[]> {
     timestamp_granularities: ["segment"],
   });
 
+  // Validate the SDK returned a verbose response with segments before mapping
   const transcription = rawTranscription as unknown as GroqVerboseTranscription;
-  const segments = transcription.segments ?? [];
+  if (
+    typeof transcription !== "object" ||
+    transcription === null ||
+    !Array.isArray(transcription.segments)
+  ) {
+    throw new Error("Groq API did not return expected verbose_json with segments");
+  }
+  const segments: GroqSegment[] = transcription.segments;
 
   if (!segments.length) return [];
 

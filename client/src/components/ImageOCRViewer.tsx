@@ -114,16 +114,19 @@ export default function ImageOCRViewer({ mediaItem }: Props) {
             key={i}
             type="button"
             onClick={() => openBlock(block)}
-            className="absolute rounded px-0.5 py-px text-transparent hover:bg-primary/20 hover:text-primary border border-transparent hover:border-primary/40 transition-colors"
+            className="absolute rounded px-1 py-px font-chinese text-xs leading-tight bg-primary/20 text-primary border border-primary/40 hover:bg-primary/40 hover:border-primary/70 transition-colors overflow-hidden whitespace-nowrap"
             style={{
               left: `${block.x}%`,
               top: `${block.y}%`,
               width: `${block.width}%`,
+              minWidth: "2rem",
               height: `${Math.max(block.height, 2)}%`,
-              minHeight: "1.5rem",
+              minHeight: "1.4rem",
             }}
             title={block.text}
-          />
+          >
+            <span className="block truncate">{block.text}</span>
+          </button>
         ))}
       </div>
 
