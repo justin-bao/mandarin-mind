@@ -1,4 +1,4 @@
-import type { Express, Request, Response } from "express";
+import express, { type Express, type Request, type Response } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import path from "path";
@@ -443,16 +443,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ─── Static file serving for uploads ─────────────────────────────────────
-  app.use("/uploads", (req: Request, res: Response) => {
-    const safeName = path.basename(req.path);
-    const filePath = path.join(UPLOADS_DIR, safeName);
-    if (fs.existsSync(filePath)) {
-      res.sendFile(filePath);
-    } else {
-      res.status(404).json({ error: "File not found" });
-    }
-  });
+  // ─── Static file serving for uploads (express.static for simplicity) ────
+  app.use("/uploads", express.static(UPLOADS_DIR, { maxAge: "1d", fallthrough: false }));
 
   const httpServer = createServer(app);
   return httpServer;

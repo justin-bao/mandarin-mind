@@ -37,6 +37,17 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Validate required API keys at startup with actionable error messages
+  const requiredEnvVars: Record<string, string> = {
+    OPENAI_API_KEY: "OpenAI API key — required for speech transcription, conversation AI, and TTS",
+    GROQ_API_KEY: "Groq API key — required for video/audio caption generation (get a free key at https://console.groq.com)",
+  };
+  for (const [key, description] of Object.entries(requiredEnvVars)) {
+    if (!process.env[key]) {
+      console.error(`[startup] Missing required environment variable: ${key}\n  ${description}`);
+    }
+  }
+
   const server = await registerRoutes(app);
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {

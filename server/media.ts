@@ -139,29 +139,44 @@ export async function generateCaptions(filePath: string): Promise<Caption[]> {
     .join(" ");
   const isChinese = /[\u4e00-\u9fff]/.test(sampleText);
 
-  // Translate all segments with gpt-4o-mini
-  const segmentList = segments
-    .map((s, i) => `${i}: ${s.text.trim()}`)
-    .join("\n");
+  // Translate all segments with gpt-4o-mini using JSON response format
+  // to guarantee a parseable output regardless of model phrasing.
+  const segmentList = segments.map((s, i) => ({ index: i, text: s.text.trim() }));
 
   const translationPrompt = isChinese
-    ? `You are a professional translator. Below are numbered segments of Chinese text. For each segment, provide the English translation. Respond with one line per segment in the format: INDEX|ENGLISH\n\n${segmentList}`
-    : `You are a professional translator. Below are numbered segments of text. For each segment, provide the Chinese (Simplified) translation. Respond with one line per segment in the format: INDEX|CHINESE\n\n${segmentList}`;
+    ? `You are a professional translator. Translate each Chinese segment to English.
+Return a JSON object with key "translations" whose value is an array of objects: { "index": number, "translated": string }.
+Segments:\n${JSON.stringify(segmentList)}`
+    : `You are a professional translator. Translate each segment to Chinese (Simplified).
+Return a JSON object with key "translations" whose value is an array of objects: { "index": number, "translated": string }.
+Segments:\n${JSON.stringify(segmentList)}`;
 
   const completion = await openai.chat.completions.create({
     model: "gpt-4o-mini",
     messages: [{ role: "user", content: translationPrompt }],
+    response_format: { type: "json_object" },
     temperature: 0.1,
     max_tokens: 2000,
   });
 
-  const translationText = completion.choices[0]?.message?.content ?? "";
+  interface TranslationEntry { index: number; translated: string }
+  interface TranslationResponse { translations: TranslationEntry[] }
+
   const translationMap = new Map<number, string>();
-  for (const line of translationText.split("\n")) {
-    const match = line.match(/^(\d+)\|(.+)/);
-    if (match) {
-      translationMap.set(parseInt(match[1], 10), match[2].trim());
+  try {
+    const parsed = JSON.parse(
+      completion.choices[0]?.message?.content ?? "{}"
+    ) as TranslationResponse;
+    if (Array.isArray(parsed.translations)) {
+      for (const entry of parsed.translations) {
+        if (typeof entry.index === "number" && typeof entry.translated === "string") {
+          translationMap.set(entry.index, entry.translated.trim());
+        }
+      }
     }
+  } catch {
+    // Translation parsing failed — captions will have empty translated side
+    console.warn("Caption translation parsing failed; proceeding with empty translations");
   }
 
   return segments.map((seg, i) => {
