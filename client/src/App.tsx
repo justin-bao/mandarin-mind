@@ -82,7 +82,7 @@ function MainApp({ user }: { user: AuthUser }) {
       return (
         <div className="p-4 space-y-6">
           <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold">Mandarin Tutor</h1>
+            <h1 className="text-3xl font-bold">MandarinMind</h1>
             <ThemeToggle />
           </div>
 

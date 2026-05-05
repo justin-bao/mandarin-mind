@@ -83,7 +83,7 @@ export default function AuthPage() {
               <Languages className="h-8 w-8 text-primary" />
             </div>
           </div>
-          <h1 className="text-2xl font-bold">Mandarin Tutor</h1>
+          <h1 className="text-2xl font-bold">MandarinMind</h1>
           <p className="text-sm text-muted-foreground">Sign in to save your progress</p>
         </div>
 
