@@ -892,7 +892,7 @@ export default function PhraseListsManager({ onStartPractice }: PhraseListsManag
           </CardContent>
         </Card>
       ) : (
-        <div className="grid grid-cols-1 gap-3">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
           {lists.map((list) => (
             <Card key={list.id} className="hover-elevate cursor-pointer" onClick={() => setSelectedList(list)}>
               <CardContent className="p-4 flex items-center gap-3">

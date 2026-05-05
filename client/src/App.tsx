@@ -4,8 +4,12 @@ import { queryClient, getQueryFn } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { SidebarProvider } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/AuthPage";
+import { AppSidebar } from "@/components/AppSidebar";
+import { MessageCircle } from "lucide-react";
 
 import TopicSelector from "@/components/TopicSelector";
 import PhraseListsManager from "@/components/PhraseListsManager";
@@ -26,6 +30,11 @@ function useCurrentUser() {
     staleTime: Infinity,
   });
 }
+
+const sidebarStyle = {
+  "--sidebar-width": "13rem",
+  "--sidebar-width-icon": "3.5rem",
+};
 
 function MainApp({ user }: { user: AuthUser }) {
   const [activeTab, setActiveTab] = useState("conversation");
@@ -63,65 +72,60 @@ function MainApp({ user }: { user: AuthUser }) {
     if (activeTab === "conversation") {
       if (conversationMode === "active") {
         return (
-          <ConversationInterface
-            topic={selectedTopic}
-            conversationId={selectedConversationId ?? undefined}
-            onBack={() => {
-              if (isRecording) return;
-              setConversationMode("topics");
-              setSelectedTopic(null);
-              setPracticeWords([]);
-              setSelectedConversationId(null);
-            }}
-            externalIsRecording={isRecording}
-            onRecordingStateChange={setIsRecording}
-          />
+          <div className="h-full">
+            <ConversationInterface
+              topic={selectedTopic}
+              conversationId={selectedConversationId ?? undefined}
+              onBack={() => {
+                if (isRecording) return;
+                setConversationMode("topics");
+                setSelectedTopic(null);
+                setPracticeWords([]);
+                setSelectedConversationId(null);
+              }}
+              externalIsRecording={isRecording}
+              onRecordingStateChange={setIsRecording}
+            />
+          </div>
         );
       }
 
       return (
-        <div className="p-4 space-y-6">
+        <div className="p-4 space-y-6 max-w-5xl mx-auto">
           <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold">MandarinMind</h1>
+            <h1 className="text-3xl font-bold md:hidden">MandarinMind</h1>
+            <h1 className="text-3xl font-bold hidden md:block">Conversation</h1>
             <ThemeToggle />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div
-              className="cursor-pointer hover-elevate p-6 rounded-lg border bg-card"
-              onClick={() => setConversationMode("topics")}
-            >
-              <h3 className="text-xl font-semibold mb-2">Topic Conversation</h3>
-              <p className="text-muted-foreground">Choose from guided conversation topics</p>
+          <Button
+            variant="outline"
+            className="w-full justify-start gap-3 h-auto py-3"
+            onClick={() => {
+              setSelectedTopic(null);
+              setConversationMode("active");
+            }}
+            data-testid="button-free-conversation"
+          >
+            <MessageCircle className="h-5 w-5 text-primary shrink-0" />
+            <div className="text-left">
+              <div className="font-medium">Free Conversation</div>
+              <div className="text-xs text-muted-foreground font-normal">Start an open-ended practice session</div>
             </div>
+          </Button>
 
-            <div
-              className="cursor-pointer hover-elevate p-6 rounded-lg border bg-card"
-              onClick={() => setConversationMode("freeform")}
-            >
-              <h3 className="text-xl font-semibold mb-2">Free Conversation</h3>
-              <p className="text-muted-foreground">Start an open conversation</p>
-            </div>
-          </div>
-
-          {conversationMode === "topics" && (
-            <TopicSelector
-              onTopicSelect={handleTopicSelect}
-              selectedTopic={selectedTopic}
-              isRecordingActive={isRecording}
-            />
-          )}
-
-          {conversationMode === "freeform" && (
-            <ConversationInterface onBack={handleBack} />
-          )}
+          <TopicSelector
+            onTopicSelect={handleTopicSelect}
+            selectedTopic={selectedTopic}
+            isRecordingActive={isRecording}
+          />
         </div>
       );
     }
 
     if (activeTab === "practice") {
       return (
-        <div className="p-4">
+        <div className="p-4 max-w-5xl mx-auto">
           <PhraseListsManager onStartPractice={handleStartPractice} />
         </div>
       );
@@ -129,19 +133,23 @@ function MainApp({ user }: { user: AuthUser }) {
 
     if (activeTab === "flashcards") {
       return (
-        <div className="p-4">
+        <div className="p-4 max-w-5xl mx-auto">
           <Flashcards />
         </div>
       );
     }
 
     if (activeTab === "media") {
-      return <MediaMode />;
+      return (
+        <div className="h-full">
+          <MediaMode />
+        </div>
+      );
     }
 
     if (activeTab === "history") {
       return (
-        <div className="p-4">
+        <div className="p-4 max-w-5xl mx-auto">
           <ConversationHistory
             onConversationSelect={(conv) => {
               setSelectedTopic({
@@ -161,7 +169,7 @@ function MainApp({ user }: { user: AuthUser }) {
 
     if (activeTab === "settings") {
       return (
-        <div className="p-4">
+        <div className="p-4 max-w-5xl mx-auto">
           <Settings user={user} />
         </div>
       );
@@ -171,14 +179,21 @@ function MainApp({ user }: { user: AuthUser }) {
   };
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <main className="flex-1 pb-16 overflow-auto">{renderContent()}</main>
-      <NavigationTabs
-        activeTab={activeTab}
-        onTabChange={handleTabChange}
-        className="fixed bottom-0 left-0 right-0 z-50"
-      />
-    </div>
+    <SidebarProvider style={sidebarStyle as React.CSSProperties} defaultOpen>
+      <div className="flex h-screen w-full">
+        <AppSidebar activeTab={activeTab} onTabChange={handleTabChange} />
+        <div className="flex flex-col flex-1 overflow-hidden min-w-0">
+          <main className="flex-1 overflow-auto pb-16 md:pb-0">
+            {renderContent()}
+          </main>
+          <NavigationTabs
+            activeTab={activeTab}
+            onTabChange={handleTabChange}
+            className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
+          />
+        </div>
+      </div>
+    </SidebarProvider>
   );
 }
 

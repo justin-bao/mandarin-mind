@@ -83,6 +83,8 @@ Preferred communication style: Simple, everyday language.
 - Flashcards: HSK 1–6 levels (~2,000 words total) with flip animation
 - Media mode: scan images for Chinese text (OCR) or upload videos/audio for bilingual captions
 - Progress tracking through conversation metrics
+- Desktop responsive layout: Shadcn sidebar (13rem, collapsible=none) on md+ screens, mobile bottom tabs on small screens
+- Content width constrained to max-w-5xl mx-auto on desktop; multi-column grids (lg:grid-cols-3) for topics and flashcard categories
 
 ## External Dependencies
 
