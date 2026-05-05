@@ -3,7 +3,6 @@ import { Badge } from "@/components/ui/badge";
 import { 
   MessageCircle, 
   GraduationCap, 
-  History, 
   Settings,
   Layers,
   Film,
@@ -42,11 +41,6 @@ const tabs: NavigationTab[] = [
     id: 'media',
     label: 'Media',
     icon: <Film className="h-5 w-5" />
-  },
-  {
-    id: 'history',
-    label: 'History', 
-    icon: <History className="h-5 w-5" />
   },
   {
     id: 'settings',
