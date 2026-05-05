@@ -20,8 +20,9 @@ Preferred communication style: Simple, everyday language.
 **Backend Architecture**  
 - Express.js server with TypeScript support
 - RESTful API design with structured route handlers
-- Memory-based storage implementation with interface for future database integration
-- Middleware for request logging and error handling
+- PostgreSQL database via Drizzle ORM (node-postgres driver) — all data persisted permanently
+- express-session + connect-pg-simple for session storage; passport-local + bcryptjs for auth
+- requireAuth middleware protecting all data API routes; auth endpoints public
 - File upload handling via multer: audio (memory, 10 MB) for conversation; image/video/audio (disk, 100 MB) for media mode
 - Static file serving from server/uploads/ at /uploads/ route
 
@@ -44,16 +45,24 @@ Preferred communication style: Simple, everyday language.
 - Tappable text chip overlay on images — tap any detected block to translate + add to phrase list
 - Video/audio captioning: Groq Whisper transcribes → GPT-4o-mini translates per segment
 - Synchronized caption player with auto-scroll and active-line highlight
-- All media persisted in-memory (MediaItem) with history list showing thumbnails/icons
+- All media persisted in PostgreSQL (media_items table) with history list showing thumbnails/icons
 - Translate any caption → detailed character-by-character pinyin breakdown
 - "Add to phrase list" action available from both OCR viewer and caption player
 
-**Data Models**
-- Conversations: Track learning sessions with topics, difficulty levels, and metadata
-- Messages: Store conversation exchanges with multilingual content (Chinese, pinyin, English)
-- Practice Words: Custom vocabulary lists for targeted learning
-- Phrase Lists + Items: Named collections with AI-powered pinyin/English auto-fill and example sentences
-- MediaItem: In-memory model with id, type (image|video|audio), fileUrl, ocrBlocks (JSON), captions (JSON)
+**Authentication**
+- Email + password registration and login (bcrypt, 12 rounds)
+- 30-day persistent sessions stored in PostgreSQL sessions table
+- All app data is private per user account; unauthenticated requests redirected to login page
+- Auth endpoints: POST /api/auth/register, /login, /logout; GET /api/auth/me
+- Settings tab shows logged-in email and Sign Out button
+
+**Data Models (PostgreSQL via Drizzle)**
+- Users: id, email (unique), passwordHash, createdAt
+- Conversations: userId FK, topic, difficulty, duration, messageCount
+- Messages: conversationId FK, text, pinyin, translation, isUser, audioUrl
+- Practice Words: userId FK, chinese, pinyin, english
+- Phrase Lists + Items: userId FK on lists; listId FK on items; AI-powered pinyin/English auto-fill
+- Media Items: userId FK, type (image|video|audio), fileUrl, ocrBlocks (jsonb), captions (jsonb)
 
 **Design System**
 - Custom color palette optimized for learning (teal-based primary colors)

@@ -1,28 +1,43 @@
-import { type Conversation, type InsertConversation, type Message, type InsertMessage, type PracticeWord, type InsertPracticeWord, type PhraseList, type InsertPhraseList, type PhraseListItem, type InsertPhraseListItem, type MediaItem, type InsertMediaItem } from "@shared/schema";
-import { randomUUID } from "crypto";
+import { eq, desc, asc } from "drizzle-orm";
+import { db } from "./db";
+import {
+  users, conversations, messages, practiceWords, phraseLists, phraseListItems, mediaItems,
+  type User, type InsertUser,
+  type Conversation, type InsertConversation,
+  type Message, type InsertMessage,
+  type PracticeWord, type InsertPracticeWord,
+  type PhraseList, type InsertPhraseList,
+  type PhraseListItem, type InsertPhraseListItem,
+  type MediaItem, type InsertMediaItem,
+} from "@shared/schema";
 
 export interface IStorage {
+  // Users
+  getUserById(id: string): Promise<User | undefined>;
+  getUserByEmail(email: string): Promise<User | undefined>;
+  createUser(user: InsertUser): Promise<User>;
+
   // Conversations
-  getConversation(id: string): Promise<Conversation | undefined>;
-  getConversations(): Promise<Conversation[]>;
+  getConversation(id: string, userId: string): Promise<Conversation | undefined>;
+  getConversations(userId: string): Promise<Conversation[]>;
   createConversation(conversation: InsertConversation): Promise<Conversation>;
   updateConversation(id: string, updates: Partial<Conversation>): Promise<Conversation>;
-  
+
   // Messages
   getMessagesByConversationId(conversationId: string): Promise<Message[]>;
   createMessage(message: InsertMessage): Promise<Message>;
-  
+
   // Practice Words (legacy)
-  getPracticeWords(): Promise<PracticeWord[]>;
+  getPracticeWords(userId: string): Promise<PracticeWord[]>;
   createPracticeWord(word: InsertPracticeWord): Promise<PracticeWord>;
-  deletePracticeWord(id: string): Promise<void>;
+  deletePracticeWord(id: string, userId: string): Promise<void>;
 
   // Phrase Lists
-  getPhraseLists(): Promise<PhraseList[]>;
-  getPhraseList(id: string): Promise<PhraseList | undefined>;
+  getPhraseLists(userId: string): Promise<PhraseList[]>;
+  getPhraseList(id: string, userId: string): Promise<PhraseList | undefined>;
   createPhraseList(list: InsertPhraseList): Promise<PhraseList>;
-  updatePhraseList(id: string, updates: Partial<PhraseList>): Promise<PhraseList>;
-  deletePhraseList(id: string): Promise<void>;
+  updatePhraseList(id: string, updates: Partial<PhraseList>, userId: string): Promise<PhraseList>;
+  deletePhraseList(id: string, userId: string): Promise<void>;
 
   // Phrase List Items
   getPhraseListItems(listId: string): Promise<PhraseListItem[]>;
@@ -31,237 +46,208 @@ export interface IStorage {
   deletePhraseListItem(id: string): Promise<void>;
 
   // Media Items
-  getMediaItems(): Promise<MediaItem[]>;
-  getMediaItem(id: string): Promise<MediaItem | undefined>;
+  getMediaItems(userId: string): Promise<MediaItem[]>;
+  getMediaItem(id: string, userId: string): Promise<MediaItem | undefined>;
   createMediaItem(item: InsertMediaItem): Promise<MediaItem>;
-  deleteMediaItem(id: string): Promise<void>;
+  deleteMediaItem(id: string, userId: string): Promise<void>;
 }
 
-export class MemStorage implements IStorage {
-  private conversations: Map<string, Conversation>;
-  private messages: Map<string, Message>;
-  private practiceWords: Map<string, PracticeWord>;
-  private phraseLists: Map<string, PhraseList>;
-  private phraseListItems: Map<string, PhraseListItem>;
-  private mediaItems: Map<string, MediaItem>;
+export class DbStorage implements IStorage {
+  // ─── Users ────────────────────────────────────────────────────────────────
 
-  constructor() {
-    this.conversations = new Map();
-    this.messages = new Map();
-    this.practiceWords = new Map();
-    this.phraseLists = new Map();
-    this.phraseListItems = new Map();
-    this.mediaItems = new Map();
+  async getUserById(id: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.id, id));
+    return user;
   }
 
-  // Conversations
-  async getConversation(id: string): Promise<Conversation | undefined> {
-    return this.conversations.get(id);
+  async getUserByEmail(email: string): Promise<User | undefined> {
+    const [user] = await db.select().from(users).where(eq(users.email, email));
+    return user;
   }
 
-  async getConversations(): Promise<Conversation[]> {
-    return Array.from(this.conversations.values()).sort(
-      (a, b) => new Date(b.updatedAt!).getTime() - new Date(a.updatedAt!).getTime()
-    );
+  async createUser(insertUser: InsertUser): Promise<User> {
+    const [user] = await db.insert(users).values(insertUser).returning();
+    return user;
+  }
+
+  // ─── Conversations ────────────────────────────────────────────────────────
+
+  async getConversation(id: string, userId: string): Promise<Conversation | undefined> {
+    const [conv] = await db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.id, id));
+    if (!conv || conv.userId !== userId) return undefined;
+    return conv;
+  }
+
+  async getConversations(userId: string): Promise<Conversation[]> {
+    return db
+      .select()
+      .from(conversations)
+      .where(eq(conversations.userId, userId))
+      .orderBy(desc(conversations.updatedAt));
   }
 
   async createConversation(insertConversation: InsertConversation): Promise<Conversation> {
-    const id = randomUUID();
-    const now = new Date();
-    const conversation: Conversation = {
-      id,
-      topic: insertConversation.topic ?? null,
-      topicZh: insertConversation.topicZh ?? null,
-      difficulty: (insertConversation.difficulty ?? null) as 'Beginner' | 'Intermediate' | 'Advanced' | null,
-      duration: 0,
-      messageCount: 0,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.conversations.set(id, conversation);
-    return conversation;
+    const [conv] = await db.insert(conversations).values({
+      ...insertConversation,
+      difficulty: insertConversation.difficulty as 'Beginner' | 'Intermediate' | 'Advanced' | null | undefined,
+    }).returning();
+    return conv;
   }
 
   async updateConversation(id: string, updates: Partial<Conversation>): Promise<Conversation> {
-    const existing = this.conversations.get(id);
-    if (!existing) {
-      throw new Error(`Conversation ${id} not found`);
-    }
-    const updated = {
-      ...existing,
-      ...updates,
-      updatedAt: new Date(),
-    };
-    this.conversations.set(id, updated);
-    return updated;
+    const [conv] = await db
+      .update(conversations)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(conversations.id, id))
+      .returning();
+    if (!conv) throw new Error(`Conversation ${id} not found`);
+    return conv;
   }
 
-  // Messages
+  // ─── Messages ─────────────────────────────────────────────────────────────
+
   async getMessagesByConversationId(conversationId: string): Promise<Message[]> {
-    return Array.from(this.messages.values())
-      .filter(message => message.conversationId === conversationId)
-      .sort((a, b) => new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime());
+    return db
+      .select()
+      .from(messages)
+      .where(eq(messages.conversationId, conversationId))
+      .orderBy(asc(messages.createdAt));
   }
 
   async createMessage(insertMessage: InsertMessage): Promise<Message> {
-    const id = randomUUID();
-    const message: Message = {
-      id,
-      conversationId: insertMessage.conversationId,
-      text: insertMessage.text,
-      pinyin: insertMessage.pinyin ?? null,
-      translation: insertMessage.translation ?? null,
+    const [msg] = await db.insert(messages).values({
+      ...insertMessage,
       isUser: insertMessage.isUser as 0 | 1,
-      audioUrl: insertMessage.audioUrl ?? null,
-      createdAt: new Date(),
-    };
-    this.messages.set(id, message);
-
-    const conversation = this.conversations.get(insertMessage.conversationId);
-    if (conversation) {
-      await this.updateConversation(insertMessage.conversationId, {
-        messageCount: (conversation.messageCount || 0) + 1,
-      });
-    }
-
-    return message;
+    }).returning();
+    // Update conversation message count
+    const convMessages = await this.getMessagesByConversationId(insertMessage.conversationId);
+    await db
+      .update(conversations)
+      .set({ messageCount: convMessages.length, updatedAt: new Date() })
+      .where(eq(conversations.id, insertMessage.conversationId));
+    return msg;
   }
 
-  // Practice Words (legacy)
-  async getPracticeWords(): Promise<PracticeWord[]> {
-    return Array.from(this.practiceWords.values()).sort(
-      (a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
-    );
+  // ─── Practice Words ───────────────────────────────────────────────────────
+
+  async getPracticeWords(userId: string): Promise<PracticeWord[]> {
+    return db
+      .select()
+      .from(practiceWords)
+      .where(eq(practiceWords.userId, userId))
+      .orderBy(desc(practiceWords.createdAt));
   }
 
   async createPracticeWord(insertWord: InsertPracticeWord): Promise<PracticeWord> {
-    const id = randomUUID();
-    const word: PracticeWord = {
-      id,
-      chinese: insertWord.chinese,
-      pinyin: insertWord.pinyin ?? null,
-      english: insertWord.english,
-      createdAt: new Date(),
-    };
-    this.practiceWords.set(id, word);
+    const [word] = await db.insert(practiceWords).values(insertWord).returning();
     return word;
   }
 
-  async deletePracticeWord(id: string): Promise<void> {
-    this.practiceWords.delete(id);
+  async deletePracticeWord(id: string, userId: string): Promise<void> {
+    await db
+      .delete(practiceWords)
+      .where(eq(practiceWords.id, id));
   }
 
-  // Phrase Lists
-  async getPhraseLists(): Promise<PhraseList[]> {
-    return Array.from(this.phraseLists.values()).sort(
-      (a, b) => new Date(b.createdAt!).getTime() - new Date(a.createdAt!).getTime()
-    );
+  // ─── Phrase Lists ─────────────────────────────────────────────────────────
+
+  async getPhraseLists(userId: string): Promise<PhraseList[]> {
+    return db
+      .select()
+      .from(phraseLists)
+      .where(eq(phraseLists.userId, userId))
+      .orderBy(desc(phraseLists.createdAt));
   }
 
-  async getPhraseList(id: string): Promise<PhraseList | undefined> {
-    return this.phraseLists.get(id);
-  }
-
-  async createPhraseList(insertList: InsertPhraseList): Promise<PhraseList> {
-    const id = randomUUID();
-    const now = new Date();
-    const list: PhraseList = {
-      ...insertList,
-      id,
-      description: insertList.description ?? null,
-      createdAt: now,
-      updatedAt: now,
-    };
-    this.phraseLists.set(id, list);
+  async getPhraseList(id: string, userId: string): Promise<PhraseList | undefined> {
+    const [list] = await db.select().from(phraseLists).where(eq(phraseLists.id, id));
+    if (!list || list.userId !== userId) return undefined;
     return list;
   }
 
-  async updatePhraseList(id: string, updates: Partial<PhraseList>): Promise<PhraseList> {
-    const existing = this.phraseLists.get(id);
-    if (!existing) {
-      throw new Error(`Phrase list ${id} not found`);
-    }
-    const updated = {
-      ...existing,
-      ...updates,
-      updatedAt: new Date(),
-    };
-    this.phraseLists.set(id, updated);
-    return updated;
+  async createPhraseList(insertList: InsertPhraseList): Promise<PhraseList> {
+    const [list] = await db.insert(phraseLists).values(insertList).returning();
+    return list;
   }
 
-  async deletePhraseList(id: string): Promise<void> {
-    this.phraseLists.delete(id);
-    // Cascade: remove all items in this list
-    for (const [itemId, item] of Array.from(this.phraseListItems.entries())) {
-      if (item.listId === id) {
-        this.phraseListItems.delete(itemId);
-      }
-    }
+  async updatePhraseList(id: string, updates: Partial<PhraseList>, userId: string): Promise<PhraseList> {
+    const [list] = await db
+      .update(phraseLists)
+      .set({ ...updates, updatedAt: new Date() })
+      .where(eq(phraseLists.id, id))
+      .returning();
+    if (!list) throw new Error(`Phrase list ${id} not found`);
+    return list;
   }
 
-  // Phrase List Items
+  async deletePhraseList(id: string, userId: string): Promise<void> {
+    await db.delete(phraseLists).where(eq(phraseLists.id, id));
+  }
+
+  // ─── Phrase List Items ────────────────────────────────────────────────────
+
   async getPhraseListItems(listId: string): Promise<PhraseListItem[]> {
-    return Array.from(this.phraseListItems.values())
-      .filter(item => item.listId === listId)
-      .sort((a, b) => new Date(a.createdAt!).getTime() - new Date(b.createdAt!).getTime());
+    return db
+      .select()
+      .from(phraseListItems)
+      .where(eq(phraseListItems.listId, listId))
+      .orderBy(asc(phraseListItems.createdAt));
   }
 
   async createPhraseListItem(insertItem: InsertPhraseListItem): Promise<PhraseListItem> {
-    const id = randomUUID();
-    const item: PhraseListItem = {
-      ...insertItem,
-      id,
-      pinyin: insertItem.pinyin ?? null,
-      exampleSentences: insertItem.exampleSentences ?? null,
-      createdAt: new Date(),
-    };
-    this.phraseListItems.set(id, item);
+    const [item] = await db.insert(phraseListItems).values(insertItem).returning();
     return item;
   }
 
   async updatePhraseListItem(id: string, updates: Partial<PhraseListItem>): Promise<PhraseListItem> {
-    const existing = this.phraseListItems.get(id);
-    if (!existing) throw new Error(`Phrase list item ${id} not found`);
-    const updated = { ...existing, ...updates };
-    this.phraseListItems.set(id, updated);
-    return updated;
-  }
-
-  async deletePhraseListItem(id: string): Promise<void> {
-    this.phraseListItems.delete(id);
-  }
-
-  // Media Items
-  async getMediaItems(): Promise<MediaItem[]> {
-    return Array.from(this.mediaItems.values()).sort(
-      (a, b) => new Date(b.uploadedAt).getTime() - new Date(a.uploadedAt).getTime()
-    );
-  }
-
-  async getMediaItem(id: string): Promise<MediaItem | undefined> {
-    return this.mediaItems.get(id);
-  }
-
-  async createMediaItem(insertItem: InsertMediaItem): Promise<MediaItem> {
-    const id = randomUUID();
-    const item: MediaItem = {
-      id,
-      type: insertItem.type,
-      originalName: insertItem.originalName,
-      mimeType: insertItem.mimeType,
-      fileUrl: insertItem.fileUrl,
-      uploadedAt: new Date(),
-      ocrBlocks: insertItem.ocrBlocks ?? null,
-      captions: insertItem.captions ?? null,
-    };
-    this.mediaItems.set(id, item);
+    const [item] = await db
+      .update(phraseListItems)
+      .set(updates)
+      .where(eq(phraseListItems.id, id))
+      .returning();
+    if (!item) throw new Error(`Phrase list item ${id} not found`);
     return item;
   }
 
-  async deleteMediaItem(id: string): Promise<void> {
-    this.mediaItems.delete(id);
+  async deletePhraseListItem(id: string): Promise<void> {
+    await db.delete(phraseListItems).where(eq(phraseListItems.id, id));
+  }
+
+  // ─── Media Items ──────────────────────────────────────────────────────────
+
+  async getMediaItems(userId: string): Promise<MediaItem[]> {
+    return db
+      .select()
+      .from(mediaItems)
+      .where(eq(mediaItems.userId, userId))
+      .orderBy(desc(mediaItems.uploadedAt));
+  }
+
+  async getMediaItem(id: string, userId: string): Promise<MediaItem | undefined> {
+    const [item] = await db.select().from(mediaItems).where(eq(mediaItems.id, id));
+    if (!item || item.userId !== userId) return undefined;
+    return item;
+  }
+
+  async createMediaItem(insertItem: InsertMediaItem): Promise<MediaItem> {
+    const [item] = await db.insert(mediaItems).values({
+      userId: insertItem.userId,
+      type: insertItem.type as 'image' | 'video' | 'audio',
+      originalName: insertItem.originalName,
+      mimeType: insertItem.mimeType,
+      fileUrl: insertItem.fileUrl,
+      ocrBlocks: (insertItem.ocrBlocks ?? null) as any,
+      captions: (insertItem.captions ?? null) as any,
+    }).returning();
+    return item;
+  }
+
+  async deleteMediaItem(id: string, userId: string): Promise<void> {
+    await db.delete(mediaItems).where(eq(mediaItems.id, id));
   }
 }
 
-export const storage = new MemStorage();
+export const storage = new DbStorage();

@@ -418,7 +418,7 @@ export default function MediaMode() {
                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <TypeBadge type={item.type} />
                   <span className="text-xs text-muted-foreground">
-                    {formatRelativeDate(item.uploadedAt)}
+                    {formatRelativeDate(item.uploadedAt ?? new Date())}
                   </span>
                   {item.type === "image" && item.ocrBlocks && (
                     <span className="text-xs text-muted-foreground">

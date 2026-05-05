@@ -1,19 +1,34 @@
-import express, { type Express, type Request, type Response } from "express";
+import express, { type Express, type Request, type Response, type NextFunction } from "express";
 import { createServer, type Server } from "http";
 import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
+import bcrypt from "bcryptjs";
+import passport from "passport";
 import { storage } from "./storage";
 import { mandarinTutorService } from "./openai";
 import { lookupPhrase, translateSentence } from "./translation";
 import { runOCR, generateCaptions } from "./media";
-import { insertConversationSchema, insertMessageSchema, insertPracticeWordSchema, insertPhraseListSchema, insertPhraseListItemSchema } from "@shared/schema";
+import {
+  insertConversationSchema,
+  insertMessageSchema,
+  insertPracticeWordSchema,
+  insertPhraseListSchema,
+  insertPhraseListItemSchema,
+} from "@shared/schema";
+import { z } from "zod";
 
 // ─── Uploads directory ────────────────────────────────────────────────────────
 const UPLOADS_DIR = path.join(process.cwd(), "server", "uploads");
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+}
+
+// ─── Auth middleware ──────────────────────────────────────────────────────────
+export function requireAuth(req: Request, res: Response, next: NextFunction) {
+  if (req.isAuthenticated()) return next();
+  res.status(401).json({ error: "Unauthorized" });
 }
 
 // ─── Multer: audio (memory) for conversation audio endpoint ──────────────────
@@ -35,7 +50,7 @@ const mediaUpload = multer({
       cb(null, `${randomUUID()}${ext}`);
     },
   }),
-  limits: { fileSize: 100 * 1024 * 1024 }, // 100 MB
+  limits: { fileSize: 100 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
     if (
       file.mimetype.startsWith("image/") ||
@@ -50,26 +65,83 @@ const mediaUpload = multer({
 });
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Serve uploaded files — cache header middleware then pass-through
+  // Serve uploaded files
   app.use("/uploads", (req: Request, res: Response, next) => {
     res.setHeader("Cache-Control", "public, max-age=86400");
     next();
   });
 
-  // ─── Conversations ────────────────────────────────────────────────────────
-  app.get("/api/conversations", async (req: Request, res: Response) => {
+  // ─── Auth endpoints (no requireAuth) ─────────────────────────────────────
+
+  const registerSchema = z.object({
+    email: z.string().email("Invalid email address"),
+    password: z.string().min(8, "Password must be at least 8 characters"),
+  });
+
+  app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
-      const conversations = await storage.getConversations();
-      res.json(conversations);
+      const { email, password } = registerSchema.parse(req.body);
+      const normalizedEmail = email.toLowerCase().trim();
+
+      const existing = await storage.getUserByEmail(normalizedEmail);
+      if (existing) {
+        return res.status(409).json({ error: "An account with that email already exists" });
+      }
+
+      const passwordHash = await bcrypt.hash(password, 12);
+      const user = await storage.createUser({ email: normalizedEmail, passwordHash });
+      const { passwordHash: _, ...safeUser } = user;
+
+      req.login(safeUser, (err) => {
+        if (err) return res.status(500).json({ error: "Login after register failed" });
+        res.json(safeUser);
+      });
+    } catch (error) {
+      if (error instanceof z.ZodError) {
+        return res.status(400).json({ error: error.errors[0].message });
+      }
+      console.error("Register error:", error);
+      res.status(500).json({ error: "Registration failed" });
+    }
+  });
+
+  app.post("/api/auth/login", (req: Request, res: Response, next: NextFunction) => {
+    passport.authenticate("local", (err: any, user: any, info: any) => {
+      if (err) return next(err);
+      if (!user) return res.status(401).json({ error: info?.message || "Invalid email or password" });
+      req.login(user, (loginErr) => {
+        if (loginErr) return next(loginErr);
+        res.json(user);
+      });
+    })(req, res, next);
+  });
+
+  app.post("/api/auth/logout", (req: Request, res: Response, next: NextFunction) => {
+    req.logout((err) => {
+      if (err) return next(err);
+      res.json({ success: true });
+    });
+  });
+
+  app.get("/api/auth/me", (req: Request, res: Response) => {
+    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+    res.json(req.user);
+  });
+
+  // ─── Conversations ────────────────────────────────────────────────────────
+  app.get("/api/conversations", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const convs = await storage.getConversations(req.user!.id);
+      res.json(convs);
     } catch (error) {
       console.error("Error fetching conversations:", error);
       res.status(500).json({ error: "Failed to fetch conversations" });
     }
   });
 
-  app.post("/api/conversations", async (req: Request, res: Response) => {
+  app.post("/api/conversations", requireAuth, async (req: Request, res: Response) => {
     try {
-      const validatedData = insertConversationSchema.parse(req.body);
+      const validatedData = insertConversationSchema.parse({ ...req.body, userId: req.user!.id });
       const conversation = await storage.createConversation(validatedData);
       res.json(conversation);
     } catch (error) {
@@ -78,12 +150,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/conversations/:id", async (req: Request, res: Response) => {
+  app.get("/api/conversations/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const conversation = await storage.getConversation(req.params.id);
-      if (!conversation) {
-        return res.status(404).json({ error: "Conversation not found" });
-      }
+      const conversation = await storage.getConversation(req.params.id, req.user!.id);
+      if (!conversation) return res.status(404).json({ error: "Conversation not found" });
       res.json(conversation);
     } catch (error) {
       console.error("Error fetching conversation:", error);
@@ -92,29 +162,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ─── Messages ─────────────────────────────────────────────────────────────
-  app.get("/api/conversations/:id/messages", async (req: Request, res: Response) => {
+  app.get("/api/conversations/:id/messages", requireAuth, async (req: Request, res: Response) => {
     try {
-      const messages = await storage.getMessagesByConversationId(req.params.id);
-      res.json(messages);
+      const conversation = await storage.getConversation(req.params.id, req.user!.id);
+      if (!conversation) return res.status(404).json({ error: "Conversation not found" });
+      const msgs = await storage.getMessagesByConversationId(req.params.id);
+      res.json(msgs);
     } catch (error) {
       console.error("Error fetching messages:", error);
       res.status(500).json({ error: "Failed to fetch messages" });
     }
   });
 
-  // Process audio input for conversation
-  app.post("/api/conversations/:id/audio", audioUpload.single("audio"), async (req: Request, res: Response) => {
+  app.post("/api/conversations/:id/audio", requireAuth, audioUpload.single("audio"), async (req: Request, res: Response) => {
     try {
-      if (!req.file) {
-        return res.status(400).json({ error: "No audio file provided" });
-      }
+      if (!req.file) return res.status(400).json({ error: "No audio file provided" });
 
       const conversationId = req.params.id;
-      const conversation = await storage.getConversation(conversationId);
-
-      if (!conversation) {
-        return res.status(404).json({ error: "Conversation not found" });
-      }
+      const conversation = await storage.getConversation(conversationId, req.user!.id);
+      if (!conversation) return res.status(404).json({ error: "Conversation not found" });
 
       const transcription = await mandarinTutorService.transcribeAudio(req.file.buffer);
       const userTranslation = await mandarinTutorService.addPinyinAndTranslation(transcription.text);
@@ -128,8 +194,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
         audioUrl: null,
       });
 
-      const messages = await storage.getMessagesByConversationId(conversationId);
-      const conversationHistory = messages.slice(-6).map((msg) => ({
+      const msgs = await storage.getMessagesByConversationId(conversationId);
+      const conversationHistory = msgs.slice(-6).map((msg) => ({
         role: msg.isUser ? ("user" as const) : ("assistant" as const),
         content: msg.text,
       }));
@@ -167,18 +233,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ─── Practice Words ───────────────────────────────────────────────────────
-  app.get("/api/practice-words", async (req: Request, res: Response) => {
+  app.get("/api/practice-words", requireAuth, async (req: Request, res: Response) => {
     try {
-      const words = await storage.getPracticeWords();
+      const words = await storage.getPracticeWords(req.user!.id);
       res.json(words);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch practice words" });
     }
   });
 
-  app.post("/api/practice-words", async (req: Request, res: Response) => {
+  app.post("/api/practice-words", requireAuth, async (req: Request, res: Response) => {
     try {
-      const validatedData = insertPracticeWordSchema.parse(req.body);
+      const validatedData = insertPracticeWordSchema.parse({ ...req.body, userId: req.user!.id });
       const word = await storage.createPracticeWord(validatedData);
       res.json(word);
     } catch (error) {
@@ -186,9 +252,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/practice-words/:id", async (req: Request, res: Response) => {
+  app.delete("/api/practice-words/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      await storage.deletePracticeWord(req.params.id);
+      await storage.deletePracticeWord(req.params.id, req.user!.id);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete practice word" });
@@ -196,9 +262,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ─── Phrase Lists ─────────────────────────────────────────────────────────
-  app.get("/api/phrase-lists", async (req: Request, res: Response) => {
+  app.get("/api/phrase-lists", requireAuth, async (req: Request, res: Response) => {
     try {
-      const lists = await storage.getPhraseLists();
+      const lists = await storage.getPhraseLists(req.user!.id);
       const listsWithCount = await Promise.all(
         lists.map(async (list) => {
           const items = await storage.getPhraseListItems(list.id);
@@ -211,9 +277,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/phrase-lists", async (req: Request, res: Response) => {
+  app.post("/api/phrase-lists", requireAuth, async (req: Request, res: Response) => {
     try {
-      const validatedData = insertPhraseListSchema.parse(req.body);
+      const validatedData = insertPhraseListSchema.parse({ ...req.body, userId: req.user!.id });
       const list = await storage.createPhraseList(validatedData);
       res.json(list);
     } catch (error) {
@@ -221,9 +287,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get("/api/phrase-lists/:id", async (req: Request, res: Response) => {
+  app.get("/api/phrase-lists/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const list = await storage.getPhraseList(req.params.id);
+      const list = await storage.getPhraseList(req.params.id, req.user!.id);
       if (!list) return res.status(404).json({ error: "Phrase list not found" });
       res.json(list);
     } catch (error) {
@@ -231,19 +297,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/phrase-lists/:id", async (req: Request, res: Response) => {
+  app.patch("/api/phrase-lists/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       const { name, description } = req.body;
-      const list = await storage.updatePhraseList(req.params.id, { name, description });
+      const list = await storage.updatePhraseList(req.params.id, { name, description }, req.user!.id);
       res.json(list);
     } catch (error) {
       res.status(400).json({ error: "Failed to update phrase list" });
     }
   });
 
-  app.delete("/api/phrase-lists/:id", async (req: Request, res: Response) => {
+  app.delete("/api/phrase-lists/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      await storage.deletePhraseList(req.params.id);
+      await storage.deletePhraseList(req.params.id, req.user!.id);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete phrase list" });
@@ -251,8 +317,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ─── Phrase List Items ────────────────────────────────────────────────────
-  app.get("/api/phrase-lists/:id/items", async (req: Request, res: Response) => {
+  app.get("/api/phrase-lists/:id/items", requireAuth, async (req: Request, res: Response) => {
     try {
+      const list = await storage.getPhraseList(req.params.id, req.user!.id);
+      if (!list) return res.status(404).json({ error: "Phrase list not found" });
       const items = await storage.getPhraseListItems(req.params.id);
       res.json(items);
     } catch (error) {
@@ -260,8 +328,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/phrase-lists/:id/items", async (req: Request, res: Response) => {
+  app.post("/api/phrase-lists/:id/items", requireAuth, async (req: Request, res: Response) => {
     try {
+      const list = await storage.getPhraseList(req.params.id, req.user!.id);
+      if (!list) return res.status(404).json({ error: "Phrase list not found" });
       const validatedData = insertPhraseListItemSchema.parse({ ...req.body, listId: req.params.id });
       const item = await storage.createPhraseListItem(validatedData);
       res.json(item);
@@ -270,8 +340,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.patch("/api/phrase-lists/:listId/items/:itemId", async (req: Request, res: Response) => {
+  app.patch("/api/phrase-lists/:listId/items/:itemId", requireAuth, async (req: Request, res: Response) => {
     try {
+      const list = await storage.getPhraseList(req.params.listId, req.user!.id);
+      if (!list) return res.status(404).json({ error: "Phrase list not found" });
       const item = await storage.updatePhraseListItem(req.params.itemId, req.body);
       res.json(item);
     } catch (error) {
@@ -279,7 +351,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.delete("/api/phrase-lists/:listId/items/:itemId", async (req: Request, res: Response) => {
+  app.delete("/api/phrase-lists/:listId/items/:itemId", requireAuth, async (req: Request, res: Response) => {
     try {
       await storage.deletePhraseListItem(req.params.itemId);
       res.json({ success: true });
@@ -289,12 +361,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ─── Example sentence + translate + lookup + audio ───────────────────────
-  app.post("/api/phrases/example-sentence", async (req: Request, res: Response) => {
+  app.post("/api/phrases/example-sentence", requireAuth, async (req: Request, res: Response) => {
     try {
       const { chinese, english } = req.body;
-      if (!chinese || !english) {
-        return res.status(400).json({ error: "chinese and english are required" });
-      }
+      if (!chinese || !english) return res.status(400).json({ error: "chinese and english are required" });
       const result = await mandarinTutorService.generateExampleSentence(chinese.trim(), english.trim());
       res.json(result);
     } catch (error) {
@@ -302,12 +372,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/translate/sentence", async (req: Request, res: Response) => {
+  app.post("/api/translate/sentence", requireAuth, async (req: Request, res: Response) => {
     try {
       const { text, direction } = req.body;
-      if (!text || typeof text !== "string") {
-        return res.status(400).json({ error: "text is required" });
-      }
+      if (!text || typeof text !== "string") return res.status(400).json({ error: "text is required" });
       const dir = direction === "en-zh" ? "en-zh" : "zh-en";
       const result = await translateSentence(text.trim(), dir);
       res.json(result);
@@ -316,12 +384,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/phrases/lookup", async (req: Request, res: Response) => {
+  app.post("/api/phrases/lookup", requireAuth, async (req: Request, res: Response) => {
     try {
       const { chinese } = req.body;
-      if (!chinese || typeof chinese !== "string") {
-        return res.status(400).json({ error: "Chinese text is required" });
-      }
+      if (!chinese || typeof chinese !== "string") return res.status(400).json({ error: "Chinese text is required" });
       const result = await lookupPhrase(chinese.trim());
       res.json(result);
     } catch (error) {
@@ -329,7 +395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post("/api/audio/generate", async (req: Request, res: Response) => {
+  app.post("/api/audio/generate", requireAuth, async (req: Request, res: Response) => {
     try {
       const { text } = req.body;
       if (!text) return res.status(400).json({ error: "No text provided" });
@@ -342,29 +408,24 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ─── Media: list + delete ─────────────────────────────────────────────────
-  app.get("/api/media", async (req: Request, res: Response) => {
+  app.get("/api/media", requireAuth, async (req: Request, res: Response) => {
     try {
-      const items = await storage.getMediaItems();
+      const items = await storage.getMediaItems(req.user!.id);
       res.json(items);
     } catch (error) {
       res.status(500).json({ error: "Failed to fetch media items" });
     }
   });
 
-  app.delete("/api/media/:id", async (req: Request, res: Response) => {
+  app.delete("/api/media/:id", requireAuth, async (req: Request, res: Response) => {
     try {
-      const item = await storage.getMediaItem(req.params.id);
+      const item = await storage.getMediaItem(req.params.id, req.user!.id);
       if (!item) return res.status(404).json({ error: "Media item not found" });
 
-      // Delete file from disk — fileUrl is always "/uploads/<filename>"
       const filePath = path.join(UPLOADS_DIR, path.basename(item.fileUrl));
-      try {
-        fs.unlinkSync(filePath);
-      } catch {
-        // File already gone — continue
-      }
+      try { fs.unlinkSync(filePath); } catch { /* already gone */ }
 
-      await storage.deleteMediaItem(req.params.id);
+      await storage.deleteMediaItem(req.params.id, req.user!.id);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete media item" });
@@ -377,10 +438,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   }
 
   // ─── Media: upload image (OCR) — SSE progress stream ─────────────────────
-  app.post("/api/media/upload/image", mediaUpload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/media/upload/image", requireAuth, mediaUpload.single("file"), async (req: Request, res: Response) => {
     let uploadedPath: string | undefined;
 
-    // Set up SSE headers
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -399,7 +459,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
       uploadedPath = req.file.path;
       const fileUrl = `/uploads/${req.file.filename}`;
 
-      // Step: uploaded
       sendSSE(res, "progress", { step: "uploading", status: "done" });
       sendSSE(res, "progress", { step: "scanning", status: "in-progress" });
 
@@ -413,19 +472,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       sendSSE(res, "progress", { step: "extracting", status: "done" });
 
       const item = await storage.createMediaItem({
+        userId: req.user!.id,
         type: "image",
         originalName: req.file.originalname,
         mimeType: req.file.mimetype,
         fileUrl,
-        ocrBlocks,
+        ocrBlocks: ocrBlocks ?? null,
+        captions: null,
       });
 
       sendSSE(res, "complete", { item });
     } catch (error) {
       console.error("Image upload/OCR error:", error);
-      if (uploadedPath) {
-        try { fs.unlinkSync(uploadedPath); } catch { /* already gone */ }
-      }
+      if (uploadedPath) { try { fs.unlinkSync(uploadedPath); } catch { /* gone */ } }
       const message = error instanceof Error ? error.message : "Failed to process image";
       sendSSE(res, "error", { message });
     } finally {
@@ -434,10 +493,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // ─── Media: upload video/audio (captions) — SSE progress stream ──────────
-  app.post("/api/media/upload/video", mediaUpload.single("file"), async (req: Request, res: Response) => {
+  app.post("/api/media/upload/video", requireAuth, mediaUpload.single("file"), async (req: Request, res: Response) => {
     let uploadedPath: string | undefined;
 
-    // Set up SSE headers
     res.setHeader("Content-Type", "text/event-stream");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("Connection", "keep-alive");
@@ -476,19 +534,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       sendSSE(res, "progress", { step: "translating", status: "done" });
 
       const item = await storage.createMediaItem({
+        userId: req.user!.id,
         type: isVideo ? "video" : "audio",
         originalName: req.file.originalname,
         mimeType: req.file.mimetype,
         fileUrl,
-        captions,
+        ocrBlocks: null,
+        captions: captions ?? null,
       });
 
       sendSSE(res, "complete", { item });
     } catch (error) {
       console.error("Video/audio upload error:", error);
-      if (uploadedPath) {
-        try { fs.unlinkSync(uploadedPath); } catch { /* already gone */ }
-      }
+      if (uploadedPath) { try { fs.unlinkSync(uploadedPath); } catch { /* gone */ } }
       const message = error instanceof Error ? error.message : "Failed to process media file";
       sendSSE(res, "error", { message });
     } finally {
@@ -496,7 +554,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ─── Static file serving for uploads (express.static for simplicity) ────
   app.use("/uploads", express.static(UPLOADS_DIR, { maxAge: "1d", fallthrough: false }));
 
   const httpServer = createServer(app);
