@@ -315,7 +315,7 @@ export default function MediaMode() {
 
   // ─── History + upload screen ───────────────────────────────────────────────
   return (
-    <div className="p-4 space-y-6">
+    <div className="p-4 space-y-6 max-w-5xl mx-auto">
       <h1 className="text-2xl font-bold">Media</h1>
 
       {/* Processing progress sheet */}
@@ -374,8 +374,8 @@ export default function MediaMode() {
         </h2>
 
         {isLoading && (
-          <div className="space-y-2">
-            {[0, 1, 2].map((i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+            {[0, 1, 2, 4].map((i) => (
               <Skeleton key={i} className="h-16 w-full rounded-lg" />
             ))}
           </div>
@@ -389,6 +389,7 @@ export default function MediaMode() {
           </div>
         )}
 
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
         {!isLoading && items.map((item) => (
           <Card
             key={item.id}
@@ -448,6 +449,7 @@ export default function MediaMode() {
             </CardContent>
           </Card>
         ))}
+        </div>
       </div>
 
       {/* Delete confirm */}

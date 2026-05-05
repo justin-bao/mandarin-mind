@@ -5,11 +5,9 @@ import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/AuthPage";
 import { AppSidebar } from "@/components/AppSidebar";
-import { MessageCircle } from "lucide-react";
 
 import TopicSelector from "@/components/TopicSelector";
 import PhraseListsManager from "@/components/PhraseListsManager";
@@ -97,22 +95,6 @@ function MainApp({ user }: { user: AuthUser }) {
             <h1 className="text-3xl font-bold hidden md:block">Conversation</h1>
             <ThemeToggle />
           </div>
-
-          <Button
-            variant="outline"
-            className="w-full justify-start gap-3 h-auto py-3"
-            onClick={() => {
-              setSelectedTopic(null);
-              setConversationMode("active");
-            }}
-            data-testid="button-free-conversation"
-          >
-            <MessageCircle className="h-5 w-5 text-primary shrink-0" />
-            <div className="text-left">
-              <div className="font-medium">Free Conversation</div>
-              <div className="text-xs text-muted-foreground font-normal">Start an open-ended practice session</div>
-            </div>
-          </Button>
 
           <TopicSelector
             onTopicSelect={handleTopicSelect}
