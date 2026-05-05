@@ -119,7 +119,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post("/api/auth/logout", (req: Request, res: Response, next: NextFunction) => {
     req.logout((err) => {
       if (err) return next(err);
-      res.json({ success: true });
+      req.session.destroy((destroyErr) => {
+        if (destroyErr) return next(destroyErr);
+        res.clearCookie("connect.sid");
+        res.json({ success: true });
+      });
     });
   });
 
@@ -567,8 +571,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const filePath = path.join(UPLOADS_DIR, filename);
 
       // Verify a media item with this file URL exists and belongs to the caller
-      const allItems = await storage.getMediaItems(req.user!.id);
-      const owned = allItems.some((item) => item.fileUrl === `/uploads/${filename}`);
+      const owned = await storage.getMediaItemByFileUrl(`/uploads/${filename}`, req.user!.id);
       if (!owned) return res.status(403).json({ error: "Forbidden" });
 
       if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });

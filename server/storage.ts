@@ -50,6 +50,7 @@ export interface IStorage {
   // Media Items
   getMediaItems(userId: string): Promise<MediaItem[]>;
   getMediaItem(id: string, userId: string): Promise<MediaItem | undefined>;
+  getMediaItemByFileUrl(fileUrl: string, userId: string): Promise<MediaItem | undefined>;
   createMediaItem(item: InsertMediaItem): Promise<MediaItem>;
   deleteMediaItem(id: string, userId: string): Promise<void>;
 }
@@ -245,6 +246,14 @@ export class DbStorage implements IStorage {
       .select()
       .from(mediaItems)
       .where(and(eq(mediaItems.id, id), eq(mediaItems.userId, userId)));
+    return item;
+  }
+
+  async getMediaItemByFileUrl(fileUrl: string, userId: string): Promise<MediaItem | undefined> {
+    const [item] = await db
+      .select()
+      .from(mediaItems)
+      .where(and(eq(mediaItems.fileUrl, fileUrl), eq(mediaItems.userId, userId)));
     return item;
   }
 
