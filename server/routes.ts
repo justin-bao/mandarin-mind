@@ -560,7 +560,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.use("/uploads", express.static(UPLOADS_DIR, { maxAge: "1d", fallthrough: false }));
+  // Authenticated media file delivery — verifies caller owns the media item before streaming
+  app.get("/uploads/:filename", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const filename = path.basename(req.params.filename);
+      const filePath = path.join(UPLOADS_DIR, filename);
+
+      // Verify a media item with this file URL exists and belongs to the caller
+      const allItems = await storage.getMediaItems(req.user!.id);
+      const owned = allItems.some((item) => item.fileUrl === `/uploads/${filename}`);
+      if (!owned) return res.status(403).json({ error: "Forbidden" });
+
+      if (!fs.existsSync(filePath)) return res.status(404).json({ error: "File not found" });
+      res.sendFile(filePath, { maxAge: "1d" });
+    } catch {
+      res.status(500).json({ error: "Failed to serve file" });
+    }
+  });
 
   const httpServer = createServer(app);
   return httpServer;

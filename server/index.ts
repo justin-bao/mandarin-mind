@@ -30,7 +30,7 @@ app.use(
       tableName: "sessions",
       createTableIfMissing: true,
     }),
-    secret: process.env.SESSION_SECRET || "mandarin-tutor-secret-change-in-prod",
+    secret: process.env.SESSION_SECRET!,
     resave: false,
     saveUninitialized: false,
     cookie: {
@@ -109,11 +109,17 @@ app.use((req, res, next) => {
     OPENAI_API_KEY: "OpenAI API key — required for speech transcription, conversation AI, and TTS",
     GROQ_API_KEY: "Groq API key — required for video/audio caption generation (get a free key at https://console.groq.com)",
     DATABASE_URL: "PostgreSQL connection string — required for data persistence",
+    SESSION_SECRET: "Random secret for signing session cookies — required for account security",
   };
+  const missingVars: string[] = [];
   for (const [key, description] of Object.entries(requiredEnvVars)) {
     if (!process.env[key]) {
       console.error(`[startup] Missing required environment variable: ${key}\n  ${description}`);
+      missingVars.push(key);
     }
+  }
+  if (missingVars.length > 0) {
+    process.exit(1);
   }
 
   const server = await registerRoutes(app);
