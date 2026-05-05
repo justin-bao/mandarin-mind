@@ -36,6 +36,7 @@ const sidebarStyle = {
 
 function MainApp({ user }: { user: AuthUser }) {
   const [activeTab, setActiveTab] = useState("conversation");
+  const [conversationSubTab, setConversationSubTab] = useState<"conversation" | "history">("conversation");
   const [selectedTopic, setSelectedTopic] = useState<any>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
   const [conversationMode, setConversationMode] = useState<"topics" | "practice" | "freeform" | "active">("topics");
@@ -66,8 +67,21 @@ function MainApp({ user }: { user: AuthUser }) {
     setActiveTab(tabId);
   };
 
+  const handleConversationSelect = (conv: any) => {
+    setSelectedTopic({
+      id: conv.topic,
+      name: conv.topic,
+      nameZh: conv.topicZh,
+      difficulty: conv.difficulty,
+    });
+    setConversationMode("active");
+    setConversationSubTab("conversation");
+    setSelectedConversationId(conv.id);
+  };
+
   const renderContent = () => {
     if (activeTab === "conversation") {
+      // When a conversation is active, show it full-screen (no sub-tabs)
       if (conversationMode === "active") {
         return (
           <div className="h-full">
@@ -88,44 +102,78 @@ function MainApp({ user }: { user: AuthUser }) {
         );
       }
 
-      // topics / freeform landing
+      // topics / freeform landing with History sub-tab
       return (
-        <div className="p-4 space-y-6 max-w-5xl mx-auto">
-          <div className="flex justify-between items-center">
-            <h1 className="text-3xl font-bold">MandarinMind</h1>
-            <ThemeToggle />
+        <div className="flex flex-col h-full">
+          {/* Sub-tabs */}
+          <div className="flex border-b border-border bg-card">
+            <button
+              className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                conversationSubTab === "conversation"
+                  ? "text-foreground border-b-2 border-primary"
+                  : "text-muted-foreground"
+              }`}
+              onClick={() => setConversationSubTab("conversation")}
+              data-testid="subtab-conversation"
+            >
+              Conversation
+            </button>
+            <button
+              className={`flex-1 py-3 text-sm font-medium transition-colors ${
+                conversationSubTab === "history"
+                  ? "text-foreground border-b-2 border-primary"
+                  : "text-muted-foreground"
+              }`}
+              onClick={() => setConversationSubTab("history")}
+              data-testid="subtab-history"
+            >
+              History
+            </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div
-              className="cursor-pointer hover-elevate p-6 rounded-lg border bg-card"
-              onClick={() => setConversationMode("topics")}
-              data-testid="button-mode-topics"
-            >
-              <h3 className="text-xl font-semibold mb-2">Topic Conversation</h3>
-              <p className="text-muted-foreground">Choose from guided conversation topics</p>
+          {conversationSubTab === "history" ? (
+            <div className="flex-1 overflow-auto p-4">
+              <ConversationHistory onConversationSelect={handleConversationSelect} />
             </div>
+          ) : (
+            <div className="flex-1 overflow-auto p-4 space-y-6 max-w-5xl mx-auto w-full">
+              <div className="flex justify-between items-center">
+                <h1 className="text-3xl font-bold">MandarinMind</h1>
+                <ThemeToggle />
+              </div>
 
-            <div
-              className="cursor-pointer hover-elevate p-6 rounded-lg border bg-card"
-              onClick={() => setConversationMode("freeform")}
-              data-testid="button-free-conversation"
-            >
-              <h3 className="text-xl font-semibold mb-2">Free Conversation</h3>
-              <p className="text-muted-foreground">Start an open conversation</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div
+                  className="cursor-pointer hover-elevate p-6 rounded-lg border bg-card"
+                  onClick={() => setConversationMode("topics")}
+                  data-testid="button-mode-topics"
+                >
+                  <h3 className="text-xl font-semibold mb-2">Topic Conversation</h3>
+                  <p className="text-muted-foreground">Choose from guided conversation topics</p>
+                </div>
+
+                <div
+                  className="cursor-pointer hover-elevate p-6 rounded-lg border bg-card"
+                  onClick={() => setConversationMode("freeform")}
+                  data-testid="button-free-conversation"
+                >
+                  <h3 className="text-xl font-semibold mb-2">Free Conversation</h3>
+                  <p className="text-muted-foreground">Start an open conversation</p>
+                </div>
+              </div>
+
+              {conversationMode === "topics" && (
+                <TopicSelector
+                  onTopicSelect={handleTopicSelect}
+                  selectedTopic={selectedTopic}
+                  isRecordingActive={isRecording}
+                />
+              )}
+
+              {conversationMode === "freeform" && (
+                <ConversationInterface onBack={handleBack} />
+              )}
             </div>
-          </div>
-
-          {conversationMode === "topics" && (
-            <TopicSelector
-              onTopicSelect={handleTopicSelect}
-              selectedTopic={selectedTopic}
-              isRecordingActive={isRecording}
-            />
-          )}
-
-          {conversationMode === "freeform" && (
-            <ConversationInterface onBack={handleBack} />
           )}
         </div>
       );
@@ -151,26 +199,6 @@ function MainApp({ user }: { user: AuthUser }) {
       return (
         <div className="h-full">
           <MediaMode />
-        </div>
-      );
-    }
-
-    if (activeTab === "history") {
-      return (
-        <div className="p-4 max-w-5xl mx-auto">
-          <ConversationHistory
-            onConversationSelect={(conv) => {
-              setSelectedTopic({
-                id: conv.topic,
-                name: conv.topic,
-                nameZh: conv.topicZh,
-                difficulty: conv.difficulty,
-              });
-              setConversationMode("active");
-              setActiveTab("conversation");
-              setSelectedConversationId(conv.id);
-            }}
-          />
         </div>
       );
     }
