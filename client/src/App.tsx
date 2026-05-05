@@ -5,6 +5,7 @@ import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/AuthPage";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -38,7 +39,7 @@ function MainApp({ user }: { user: AuthUser }) {
   const [activeTab, setActiveTab] = useState("conversation");
   const [selectedTopic, setSelectedTopic] = useState<any>(null);
   const [selectedConversationId, setSelectedConversationId] = useState<string | null>(null);
-  const [conversationMode, setConversationMode] = useState<"home" | "topics" | "practice" | "freeform" | "active">("home");
+  const [conversationMode, setConversationMode] = useState<"topics" | "practice" | "freeform" | "active">("topics");
   const [practiceWords, setPracticeWords] = useState<any[]>([]);
   const [isRecording, setIsRecording] = useState(false);
 
@@ -56,7 +57,7 @@ function MainApp({ user }: { user: AuthUser }) {
 
   const handleBack = () => {
     if (isRecording) return;
-    setConversationMode("home");
+    setConversationMode("topics");
     setSelectedTopic(null);
     setPracticeWords([]);
   };
@@ -76,7 +77,7 @@ function MainApp({ user }: { user: AuthUser }) {
               conversationId={selectedConversationId ?? undefined}
               onBack={() => {
                 if (isRecording) return;
-                setConversationMode("home");
+                setConversationMode("topics");
                 setSelectedTopic(null);
                 setPracticeWords([]);
                 setSelectedConversationId(null);
@@ -88,55 +89,32 @@ function MainApp({ user }: { user: AuthUser }) {
         );
       }
 
-      if (conversationMode === "topics") {
-        return (
-          <div className="p-4 space-y-6 max-w-5xl mx-auto">
-            <div className="flex justify-between items-center">
-              <h1 className="text-3xl font-bold md:hidden">MandarinMind</h1>
-              <h1 className="text-3xl font-bold hidden md:block">Conversation</h1>
-              <ThemeToggle />
-            </div>
-            <TopicSelector
-              onTopicSelect={handleTopicSelect}
-              selectedTopic={selectedTopic}
-              isRecordingActive={isRecording}
-            />
-          </div>
-        );
-      }
-
-      // "home" mode — two-option chooser
+      // topics / freeform landing
       return (
         <div className="p-4 space-y-6 max-w-5xl mx-auto">
-          <div className="flex justify-between items-center">
+          <div className="flex justify-between items-center gap-2 flex-wrap">
             <h1 className="text-3xl font-bold md:hidden">MandarinMind</h1>
             <h1 className="text-3xl font-bold hidden md:block">Conversation</h1>
-            <ThemeToggle />
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="default"
+                data-testid="button-free-conversation"
+                onClick={() => {
+                  setSelectedTopic(null);
+                  setConversationMode("active");
+                }}
+              >
+                Free Conversation
+              </Button>
+              <ThemeToggle />
+            </div>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button
-              type="button"
-              onClick={() => setConversationMode("topics")}
-              className="text-left rounded-md border bg-card p-6 hover-elevate transition-colors"
-              data-testid="button-mode-topics"
-            >
-              <h3 className="text-lg font-semibold mb-1">Topic Conversation</h3>
-              <p className="text-sm text-muted-foreground">Choose a guided topic to practise</p>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setSelectedTopic(null);
-                setConversationMode("active");
-              }}
-              className="text-left rounded-md border bg-card p-6 hover-elevate transition-colors"
-              data-testid="button-free-conversation"
-            >
-              <h3 className="text-lg font-semibold mb-1">Free Conversation</h3>
-              <p className="text-sm text-muted-foreground">Start an open-ended practice session</p>
-            </button>
-          </div>
+          <TopicSelector
+            onTopicSelect={handleTopicSelect}
+            selectedTopic={selectedTopic}
+            isRecordingActive={isRecording}
+          />
         </div>
       );
     }
