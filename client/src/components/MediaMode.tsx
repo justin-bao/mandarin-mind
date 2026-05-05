@@ -32,22 +32,134 @@ import { useToast } from "@/hooks/use-toast";
 import type { MediaItem } from "@shared/schema";
 import ImageOCRViewer from "./ImageOCRViewer";
 import MediaCaptionPlayer from "./MediaCaptionPlayer";
+import ProcessingProgressSheet, { type ProcessingStep, type StepStatus } from "./ProcessingProgressSheet";
 
-async function uploadImage(file: File): Promise<MediaItem> {
-  const form = new FormData();
-  form.append("file", file);
-  const res = await fetch("/api/media/upload/image", { method: "POST", body: form });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+// ─── SSE upload helpers ────────────────────────────────────────────────────────
+
+const IMAGE_STEPS: ProcessingStep[] = [
+  { key: "uploading", label: "Uploading file", status: "pending" },
+  { key: "scanning", label: "Scanning for text (OCR)", status: "pending" },
+  { key: "extracting", label: "Extracting text blocks", status: "pending" },
+];
+
+const VIDEO_STEPS: ProcessingStep[] = [
+  { key: "uploading", label: "Uploading file", status: "pending" },
+  { key: "transcribing", label: "Transcribing audio", status: "pending" },
+  { key: "translating", label: "Translating captions", status: "pending" },
+];
+
+function applyProgressEvent(
+  steps: ProcessingStep[],
+  stepKey: string,
+  status: StepStatus
+): ProcessingStep[] {
+  return steps.map((s) => (s.key === stepKey ? { ...s, status } : s));
 }
 
-async function uploadVideo(file: File): Promise<MediaItem> {
+function parseSSEChunk(
+  chunk: string,
+  steps: ProcessingStep[],
+  onSteps: (steps: ProcessingStep[]) => void,
+  onComplete: (item: MediaItem) => void,
+  onError: (msg: string) => void
+): ProcessingStep[] {
+  const lines = chunk.split("\n");
+  let eventName = "message";
+  let dataLine = "";
+  for (const line of lines) {
+    if (line.startsWith("event: ")) eventName = line.slice(7).trim();
+    if (line.startsWith("data: ")) dataLine = line.slice(6);
+  }
+  if (!dataLine) return steps;
+
+  try {
+    const payload = JSON.parse(dataLine);
+    if (eventName === "progress") {
+      steps = applyProgressEvent(steps, payload.step, payload.status);
+      onSteps([...steps]);
+    } else if (eventName === "complete") {
+      steps = steps.map((s) =>
+        s.status === "in-progress" || s.status === "pending"
+          ? { ...s, status: "done" as StepStatus }
+          : s
+      );
+      onSteps([...steps]);
+      onComplete(payload.item as MediaItem);
+    } else if (eventName === "error") {
+      steps = steps.map((s) =>
+        s.status === "in-progress" ? { ...s, status: "error" as StepStatus } : s
+      );
+      onSteps([...steps]);
+      onError(payload.message ?? "Processing failed");
+    }
+  } catch {
+    // Ignore malformed SSE data
+  }
+  return steps;
+}
+
+async function uploadWithProgress(
+  endpoint: string,
+  file: File,
+  initialSteps: ProcessingStep[],
+  onSteps: (steps: ProcessingStep[]) => void,
+  onComplete: (item: MediaItem) => void,
+  onError: (msg: string) => void
+) {
   const form = new FormData();
   form.append("file", file);
-  const res = await fetch("/api/media/upload/video", { method: "POST", body: form });
-  if (!res.ok) throw new Error(await res.text());
-  return res.json();
+
+  let steps = initialSteps.map((s) => ({ ...s }));
+
+  try {
+    const res = await fetch(endpoint, { method: "POST", body: form });
+
+    if (!res.ok || !res.body) {
+      const text = await res.text().catch(() => "Unknown error");
+      onError(text);
+      return;
+    }
+
+    const reader = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+
+      if (done) {
+        // Parse any remaining buffered data that didn't end with \n\n
+        const trailing = buffer.trim();
+        if (trailing) {
+          steps = parseSSEChunk(trailing, steps, onSteps, onComplete, onError);
+        }
+        break;
+      }
+
+      buffer += decoder.decode(value, { stream: true });
+
+      // Parse complete SSE events from the buffer
+      const parts = buffer.split("\n\n");
+      buffer = parts.pop() ?? "";
+
+      for (const part of parts) {
+        if (part.trim()) {
+          steps = parseSSEChunk(part, steps, onSteps, onComplete, onError);
+        }
+      }
+    }
+  } catch (err) {
+    // Network-level failure (connection drop, request aborted, etc.)
+    const message = err instanceof Error ? err.message : "Network error during upload";
+    steps = steps.map((s) =>
+      s.status === "in-progress" ? { ...s, status: "error" as StepStatus } : s
+    );
+    onSteps([...steps]);
+    onError(message);
+  }
 }
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function deleteMedia(id: string): Promise<void> {
   const res = await fetch(`/api/media/${id}`, { method: "DELETE" });
@@ -80,14 +192,20 @@ function TypeIcon({ type, className }: { type: MediaItem["type"]; className?: st
   return <FileAudio className={className} />;
 }
 
+// ─── Component ────────────────────────────────────────────────────────────────
+
 export default function MediaMode() {
   const { toast } = useToast();
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<MediaItem | null>(null);
-  const [uploadingImage, setUploadingImage] = useState(false);
-  const [uploadingVideo, setUploadingVideo] = useState(false);
+
+  // Progress sheet state
+  const [progressOpen, setProgressOpen] = useState(false);
+  const [progressTitle, setProgressTitle] = useState("");
+  const [progressSteps, setProgressSteps] = useState<ProcessingStep[]>([]);
+  const [progressError, setProgressError] = useState<string | undefined>(undefined);
 
   const { data: items = [], isLoading } = useQuery<MediaItem[]>({
     queryKey: ["/api/media"],
@@ -112,34 +230,62 @@ export default function MediaMode() {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    setUploadingImage(true);
-    try {
-      const item = await uploadImage(file);
-      queryClient.invalidateQueries({ queryKey: ["/api/media"] });
-      toast({ description: "Image scanned successfully" });
-      setSelectedItem(item);
-    } catch {
-      toast({ description: "Failed to process image", variant: "destructive" });
-    } finally {
-      setUploadingImage(false);
-    }
+
+    setProgressTitle("Processing Image");
+    setProgressSteps(IMAGE_STEPS.map((s) => ({ ...s })));
+    setProgressError(undefined);
+    setProgressOpen(true);
+
+    await uploadWithProgress(
+      "/api/media/upload/image",
+      file,
+      IMAGE_STEPS,
+      (steps) => setProgressSteps(steps),
+      (item) => {
+        queryClient.invalidateQueries({ queryKey: ["/api/media"] });
+        // Small delay so the user can see the completed state before navigating
+        setTimeout(() => {
+          setProgressOpen(false);
+          setSelectedItem(item);
+        }, 600);
+      },
+      (msg) => {
+        setProgressError(msg);
+        // Leave the sheet open so user can read the error, but re-enable uploads
+        setTimeout(() => setProgressOpen(false), 4000);
+        toast({ description: "Failed to process image", variant: "destructive" });
+      }
+    );
   };
 
   const handleVideoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
-    setUploadingVideo(true);
-    try {
-      const item = await uploadVideo(file);
-      queryClient.invalidateQueries({ queryKey: ["/api/media"] });
-      toast({ description: "Captions generated successfully" });
-      setSelectedItem(item);
-    } catch {
-      toast({ description: "Failed to process media file", variant: "destructive" });
-    } finally {
-      setUploadingVideo(false);
-    }
+
+    setProgressTitle("Processing Video / Audio");
+    setProgressSteps(VIDEO_STEPS.map((s) => ({ ...s })));
+    setProgressError(undefined);
+    setProgressOpen(true);
+
+    await uploadWithProgress(
+      "/api/media/upload/video",
+      file,
+      VIDEO_STEPS,
+      (steps) => setProgressSteps(steps),
+      (item) => {
+        queryClient.invalidateQueries({ queryKey: ["/api/media"] });
+        setTimeout(() => {
+          setProgressOpen(false);
+          setSelectedItem(item);
+        }, 600);
+      },
+      (msg) => {
+        setProgressError(msg);
+        setTimeout(() => setProgressOpen(false), 4000);
+        toast({ description: "Failed to process media file", variant: "destructive" });
+      }
+    );
   };
 
   // ─── Viewer ────────────────────────────────────────────────────────────────
@@ -172,39 +318,35 @@ export default function MediaMode() {
     <div className="p-4 space-y-6">
       <h1 className="text-2xl font-bold">Media</h1>
 
+      {/* Processing progress sheet */}
+      <ProcessingProgressSheet
+        open={progressOpen}
+        title={progressTitle}
+        steps={progressSteps}
+        errorMessage={progressError}
+      />
+
       {/* Upload buttons */}
       <div className="grid grid-cols-2 gap-3">
         <button
           type="button"
-          disabled={uploadingImage}
+          disabled={progressOpen}
           onClick={() => imageInputRef.current?.click()}
           className="flex flex-col items-center gap-2 p-5 rounded-lg border-2 border-dashed border-border hover-elevate bg-card text-center disabled:opacity-60"
         >
-          {uploadingImage ? (
-            <Loader2 className="h-7 w-7 text-primary animate-spin" />
-          ) : (
-            <Camera className="h-7 w-7 text-primary" />
-          )}
-          <span className="text-sm font-medium">
-            {uploadingImage ? "Scanning…" : "Scan Image"}
-          </span>
+          <Camera className="h-7 w-7 text-primary" />
+          <span className="text-sm font-medium">Scan Image</span>
           <span className="text-xs text-muted-foreground">JPG, PNG, WEBP, GIF</span>
         </button>
 
         <button
           type="button"
-          disabled={uploadingVideo}
+          disabled={progressOpen}
           onClick={() => videoInputRef.current?.click()}
           className="flex flex-col items-center gap-2 p-5 rounded-lg border-2 border-dashed border-border hover-elevate bg-card text-center disabled:opacity-60"
         >
-          {uploadingVideo ? (
-            <Loader2 className="h-7 w-7 text-primary animate-spin" />
-          ) : (
-            <Upload className="h-7 w-7 text-primary" />
-          )}
-          <span className="text-sm font-medium">
-            {uploadingVideo ? "Processing…" : "Upload Video / Audio"}
-          </span>
+          <Upload className="h-7 w-7 text-primary" />
+          <span className="text-sm font-medium">Upload Video / Audio</span>
           <span className="text-xs text-muted-foreground">MP4, MP3, WAV, MOV…</span>
         </button>
       </div>
@@ -273,7 +415,7 @@ export default function MediaMode() {
               {/* Info */}
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium truncate">{item.originalName}</p>
-                <div className="flex items-center gap-2 mt-0.5">
+                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                   <TypeBadge type={item.type} />
                   <span className="text-xs text-muted-foreground">
                     {formatRelativeDate(item.uploadedAt)}

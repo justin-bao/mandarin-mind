@@ -371,21 +371,46 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // ─── Media: upload image (OCR) ────────────────────────────────────────────
+  // ─── SSE helper ───────────────────────────────────────────────────────────
+  function sendSSE(res: Response, event: string, data: unknown) {
+    res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`);
+  }
+
+  // ─── Media: upload image (OCR) — SSE progress stream ─────────────────────
   app.post("/api/media/upload/image", mediaUpload.single("file"), async (req: Request, res: Response) => {
     let uploadedPath: string | undefined;
+
+    // Set up SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
     try {
-      if (!req.file) return res.status(400).json({ error: "No file provided" });
+      if (!req.file) {
+        sendSSE(res, "error", { message: "No file provided" });
+        return res.end();
+      }
       if (!req.file.mimetype.startsWith("image/")) {
         fs.unlinkSync(req.file.path);
-        return res.status(400).json({ error: "Only image files are accepted by this endpoint" });
+        sendSSE(res, "error", { message: "Only image files are accepted by this endpoint" });
+        return res.end();
       }
       uploadedPath = req.file.path;
-
       const fileUrl = `/uploads/${req.file.filename}`;
 
-      // OCR errors propagate to the client — file is cleaned up on failure
-      const ocrBlocks = await runOCR(uploadedPath);
+      // Step: uploaded
+      sendSSE(res, "progress", { step: "uploading", status: "done" });
+      sendSSE(res, "progress", { step: "scanning", status: "in-progress" });
+
+      const ocrBlocks = await runOCR(uploadedPath, (step) => {
+        if (step === "extracting") {
+          sendSSE(res, "progress", { step: "scanning", status: "done" });
+          sendSSE(res, "progress", { step: "extracting", status: "in-progress" });
+        }
+      });
+
+      sendSSE(res, "progress", { step: "extracting", status: "done" });
 
       const item = await storage.createMediaItem({
         type: "image",
@@ -395,40 +420,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
         ocrBlocks,
       });
 
-      res.json(item);
+      sendSSE(res, "complete", { item });
     } catch (error) {
       console.error("Image upload/OCR error:", error);
-      // Clean up the orphaned file on failure
       if (uploadedPath) {
         try { fs.unlinkSync(uploadedPath); } catch { /* already gone */ }
       }
       const message = error instanceof Error ? error.message : "Failed to process image";
-      res.status(500).json({ error: message });
+      sendSSE(res, "error", { message });
+    } finally {
+      res.end();
     }
   });
 
-  // ─── Media: upload video/audio (captions) ────────────────────────────────
+  // ─── Media: upload video/audio (captions) — SSE progress stream ──────────
   app.post("/api/media/upload/video", mediaUpload.single("file"), async (req: Request, res: Response) => {
     let uploadedPath: string | undefined;
+
+    // Set up SSE headers
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders();
+
     try {
-      if (!req.file) return res.status(400).json({ error: "No file provided" });
+      if (!req.file) {
+        sendSSE(res, "error", { message: "No file provided" });
+        return res.end();
+      }
       if (!req.file.mimetype.startsWith("video/") && !req.file.mimetype.startsWith("audio/")) {
         fs.unlinkSync(req.file.path);
-        return res.status(400).json({ error: "Only video or audio files are accepted by this endpoint" });
+        sendSSE(res, "error", { message: "Only video or audio files are accepted by this endpoint" });
+        return res.end();
       }
       if (!process.env.GROQ_API_KEY) {
         fs.unlinkSync(req.file.path);
-        return res.status(503).json({
-          error: "Caption generation is unavailable: GROQ_API_KEY is not set. Add your key at https://console.groq.com"
-        });
+        sendSSE(res, "error", { message: "Caption generation is unavailable: GROQ_API_KEY is not set. Add your key at https://console.groq.com" });
+        return res.end();
       }
-      uploadedPath = req.file.path;
 
+      uploadedPath = req.file.path;
       const fileUrl = `/uploads/${req.file.filename}`;
       const isVideo = req.file.mimetype.startsWith("video/");
 
-      // Caption errors propagate to the client — file is cleaned up on failure
-      const captions = await generateCaptions(uploadedPath);
+      sendSSE(res, "progress", { step: "uploading", status: "done" });
+      sendSSE(res, "progress", { step: "transcribing", status: "in-progress" });
+
+      const captions = await generateCaptions(uploadedPath, (step) => {
+        if (step === "translating") {
+          sendSSE(res, "progress", { step: "transcribing", status: "done" });
+          sendSSE(res, "progress", { step: "translating", status: "in-progress" });
+        }
+      });
+
+      sendSSE(res, "progress", { step: "translating", status: "done" });
 
       const item = await storage.createMediaItem({
         type: isVideo ? "video" : "audio",
@@ -438,14 +483,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         captions,
       });
 
-      res.json(item);
+      sendSSE(res, "complete", { item });
     } catch (error) {
       console.error("Video/audio upload error:", error);
       if (uploadedPath) {
         try { fs.unlinkSync(uploadedPath); } catch { /* already gone */ }
       }
       const message = error instanceof Error ? error.message : "Failed to process media file";
-      res.status(500).json({ error: message });
+      sendSSE(res, "error", { message });
+    } finally {
+      res.end();
     }
   });
 

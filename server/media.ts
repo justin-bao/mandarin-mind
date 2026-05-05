@@ -59,12 +59,17 @@ interface GroqVerboseTranscription {
 
 // ─── OCR via Tesseract.js ─────────────────────────────────────────────────────
 
-export async function runOCR(filePath: string): Promise<OcrBlock[]> {
+export async function runOCR(
+  filePath: string,
+  onProgress?: (step: "scanning" | "extracting") => void
+): Promise<OcrBlock[]> {
   const Tesseract = await import("tesseract.js");
   const worker = await Tesseract.createWorker(["chi_sim", "eng"]);
 
   try {
+    onProgress?.("scanning");
     const { data } = await worker.recognize(filePath);
+    onProgress?.("extracting");
     const td = data as unknown as TesseractData;
 
     // Runtime validation of OCR response shape before mapping
@@ -112,8 +117,13 @@ export async function runOCR(filePath: string): Promise<OcrBlock[]> {
 
 // ─── Audio/Video transcription + caption generation ──────────────────────────
 
-export async function generateCaptions(filePath: string): Promise<Caption[]> {
+export async function generateCaptions(
+  filePath: string,
+  onProgress?: (step: "transcribing" | "translating") => void
+): Promise<Caption[]> {
   const fileStream = fs.createReadStream(filePath);
+
+  onProgress?.("transcribing");
 
   // groq-sdk types the response as SpeechCreateParams but verbose_json returns
   // a richer object at runtime — cast through unknown to our typed interface.
@@ -143,6 +153,8 @@ export async function generateCaptions(filePath: string): Promise<Caption[]> {
     .map((s) => s.text)
     .join(" ");
   const isChinese = /[\u4e00-\u9fff]/.test(sampleText);
+
+  onProgress?.("translating");
 
   // Translate segments in chunks of 50 to avoid token-limit truncation on long media.
   const CHUNK_SIZE = 50;
