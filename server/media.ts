@@ -67,8 +67,13 @@ export async function runOCR(filePath: string): Promise<OcrBlock[]> {
     const { data } = await worker.recognize(filePath);
     const td = data as unknown as TesseractData;
 
-    const imgWidth = td.width > 0 ? td.width : 800;
-    const imgHeight = td.height > 0 ? td.height : 600;
+    // Runtime validation of OCR response shape before mapping
+    if (typeof td !== "object" || td === null || !Array.isArray(td.blocks)) {
+      throw new Error("Tesseract did not return expected OCR data structure");
+    }
+
+    const imgWidth = typeof td.width === "number" && td.width > 0 ? td.width : 800;
+    const imgHeight = typeof td.height === "number" && td.height > 0 ? td.height : 600;
 
     const blocks: OcrBlock[] = [];
 
@@ -139,44 +144,48 @@ export async function generateCaptions(filePath: string): Promise<Caption[]> {
     .join(" ");
   const isChinese = /[\u4e00-\u9fff]/.test(sampleText);
 
-  // Translate all segments with gpt-4o-mini using JSON response format
-  // to guarantee a parseable output regardless of model phrasing.
-  const segmentList = segments.map((s, i) => ({ index: i, text: s.text.trim() }));
-
-  const translationPrompt = isChinese
-    ? `You are a professional translator. Translate each Chinese segment to English.
-Return a JSON object with key "translations" whose value is an array of objects: { "index": number, "translated": string }.
-Segments:\n${JSON.stringify(segmentList)}`
-    : `You are a professional translator. Translate each segment to Chinese (Simplified).
-Return a JSON object with key "translations" whose value is an array of objects: { "index": number, "translated": string }.
-Segments:\n${JSON.stringify(segmentList)}`;
-
-  const completion = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [{ role: "user", content: translationPrompt }],
-    response_format: { type: "json_object" },
-    temperature: 0.1,
-    max_tokens: 2000,
-  });
+  // Translate segments in chunks of 50 to avoid token-limit truncation on long media.
+  const CHUNK_SIZE = 50;
 
   interface TranslationEntry { index: number; translated: string }
   interface TranslationResponse { translations: TranslationEntry[] }
 
   const translationMap = new Map<number, string>();
-  try {
-    const parsed = JSON.parse(
-      completion.choices[0]?.message?.content ?? "{}"
-    ) as TranslationResponse;
-    if (Array.isArray(parsed.translations)) {
-      for (const entry of parsed.translations) {
-        if (typeof entry.index === "number" && typeof entry.translated === "string") {
-          translationMap.set(entry.index, entry.translated.trim());
+
+  for (let chunkStart = 0; chunkStart < segments.length; chunkStart += CHUNK_SIZE) {
+    const chunk = segments.slice(chunkStart, chunkStart + CHUNK_SIZE);
+    const segmentList = chunk.map((s, i) => ({ index: chunkStart + i, text: s.text.trim() }));
+
+    const translationPrompt = isChinese
+      ? `You are a professional translator. Translate each Chinese segment to English.
+Return a JSON object with key "translations" whose value is an array of objects: { "index": number, "translated": string }.
+Segments:\n${JSON.stringify(segmentList)}`
+      : `You are a professional translator. Translate each segment to Chinese (Simplified).
+Return a JSON object with key "translations" whose value is an array of objects: { "index": number, "translated": string }.
+Segments:\n${JSON.stringify(segmentList)}`;
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [{ role: "user", content: translationPrompt }],
+      response_format: { type: "json_object" },
+      temperature: 0.1,
+      max_tokens: 2000,
+    });
+
+    try {
+      const parsed = JSON.parse(
+        completion.choices[0]?.message?.content ?? "{}"
+      ) as TranslationResponse;
+      if (Array.isArray(parsed.translations)) {
+        for (const entry of parsed.translations) {
+          if (typeof entry.index === "number" && typeof entry.translated === "string") {
+            translationMap.set(entry.index, entry.translated.trim());
+          }
         }
       }
+    } catch {
+      console.warn(`Caption translation parsing failed for chunk ${chunkStart}–${chunkStart + chunk.length - 1}; that batch will have empty translations`);
     }
-  } catch {
-    // Translation parsing failed — captions will have empty translated side
-    console.warn("Caption translation parsing failed; proceeding with empty translations");
   }
 
   return segments.map((seg, i) => {

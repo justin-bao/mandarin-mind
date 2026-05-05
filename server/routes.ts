@@ -416,6 +416,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fs.unlinkSync(req.file.path);
         return res.status(400).json({ error: "Only video or audio files are accepted by this endpoint" });
       }
+      if (!process.env.GROQ_API_KEY) {
+        fs.unlinkSync(req.file.path);
+        return res.status(503).json({
+          error: "Caption generation is unavailable: GROQ_API_KEY is not set. Add your key at https://console.groq.com"
+        });
+      }
       uploadedPath = req.file.path;
 
       const fileUrl = `/uploads/${req.file.filename}`;
