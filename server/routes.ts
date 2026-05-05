@@ -16,11 +16,13 @@ import {
   insertPracticeWordSchema,
   insertPhraseListSchema,
   insertPhraseListItemSchema,
-} from "@shared/schema";
+} from "../shared/schema";
 import { z } from "zod";
 
 // ─── Uploads directory ────────────────────────────────────────────────────────
-const UPLOADS_DIR = path.join(process.cwd(), "server", "uploads");
+const UPLOADS_DIR =
+  process.env.UPLOADS_DIR ||
+  (process.env.VERCEL ? path.join("/tmp", "mandarin-mind-uploads") : path.join(process.cwd(), "server", "uploads"));
 if (!fs.existsSync(UPLOADS_DIR)) {
   fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 }

@@ -77,11 +77,29 @@ Open `http://localhost:5000`.
 
 In development, Express serves the API and Vite middleware serves the React client from the same server.
 
+## Deploying to Vercel
+
+This repo includes [vercel.json](/Users/Justin/personal_projects/mandarin-mind/vercel.json) and [api/index.ts](/Users/Justin/personal_projects/mandarin-mind/api/index.ts) so Vercel can deploy the Vite client as static assets and run the Express API as a Node.js serverless function.
+
+In Vercel project settings, set these environment variables for the environments you deploy to:
+
+```bash
+DATABASE_URL=postgresql://user:password@host:5432/database
+OPENAI_API_KEY=your_openai_api_key
+GROQ_API_KEY=your_groq_api_key
+SESSION_SECRET=replace_with_a_long_random_secret
+```
+
+Vercel uses `npm run vercel-build`, which builds only the Vite client into `dist/public`. Requests to `/api/*` and `/uploads/*` are routed to the Express function; all other routes fall back to `index.html` for the React app.
+
+Run `npm run db:push` against the production database before first deploy, or from a trusted environment with `DATABASE_URL` set.
+
 ## Scripts
 
 ```bash
 npm run dev      # Start the development server
 npm run build    # Build the Vite client and bundled server into dist/
+npm run vercel-build # Build the static client for Vercel
 npm run start    # Run the production build
 npm run check    # Type-check with TypeScript
 npm run db:push  # Push Drizzle schema changes to the database
@@ -159,4 +177,5 @@ The production server serves static client assets from `dist/public` and the bun
 - Phrase lookup and sentence translation use the MyMemory translation API in [server/translation.ts](/Users/Justin/personal_projects/mandarin-mind/server/translation.ts), which may have daily quota limits.
 - Conversation audio uploads are limited to 10 MB.
 - Media uploads are limited to 100 MB.
+- On Vercel, uploaded media files are written to temporary function storage. For durable media history across function invocations, replace the local disk storage in [server/routes.ts](/Users/Justin/personal_projects/mandarin-mind/server/routes.ts) with persistent object storage such as Vercel Blob or S3.
 - The app expects simplified Chinese for OCR and tutor workflows.

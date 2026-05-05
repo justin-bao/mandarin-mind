@@ -10,7 +10,7 @@ import {
   type PhraseListItem, type InsertPhraseListItem,
   type MediaItem, type InsertMediaItem,
   type OcrBlock, type Caption,
-} from "@shared/schema";
+} from "../shared/schema";
 
 export interface IStorage {
   // Users

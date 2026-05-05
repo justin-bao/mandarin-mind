@@ -2,7 +2,7 @@ import fs from "fs";
 import path from "path";
 import Groq from "groq-sdk";
 import OpenAI from "openai";
-import type { OcrBlock, Caption } from "@shared/schema";
+import type { OcrBlock, Caption } from "../shared/schema";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
