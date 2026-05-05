@@ -5,7 +5,6 @@ import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { Button } from "@/components/ui/button";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/AuthPage";
 import { AppSidebar } from "@/components/AppSidebar";
@@ -89,32 +88,45 @@ function MainApp({ user }: { user: AuthUser }) {
         );
       }
 
-      // topics / freeform landing
+      // topics / freeform landing — original structure preserved, max-w added
       return (
         <div className="p-4 space-y-6 max-w-5xl mx-auto">
-          <div className="flex justify-between items-center gap-2 flex-wrap">
-            <h1 className="text-3xl font-bold md:hidden">MandarinMind</h1>
-            <h1 className="text-3xl font-bold hidden md:block">Conversation</h1>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="outline"
-                size="default"
-                data-testid="button-free-conversation"
-                onClick={() => {
-                  setSelectedTopic(null);
-                  setConversationMode("active");
-                }}
-              >
-                Free Conversation
-              </Button>
-              <ThemeToggle />
+          <div className="flex justify-between items-center">
+            <h1 className="text-3xl font-bold">MandarinMind</h1>
+            <ThemeToggle />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div
+              className="cursor-pointer hover-elevate p-6 rounded-lg border bg-card"
+              onClick={() => setConversationMode("topics")}
+              data-testid="button-mode-topics"
+            >
+              <h3 className="text-xl font-semibold mb-2">Topic Conversation</h3>
+              <p className="text-muted-foreground">Choose from guided conversation topics</p>
+            </div>
+
+            <div
+              className="cursor-pointer hover-elevate p-6 rounded-lg border bg-card"
+              onClick={() => setConversationMode("freeform")}
+              data-testid="button-free-conversation"
+            >
+              <h3 className="text-xl font-semibold mb-2">Free Conversation</h3>
+              <p className="text-muted-foreground">Start an open conversation</p>
             </div>
           </div>
-          <TopicSelector
-            onTopicSelect={handleTopicSelect}
-            selectedTopic={selectedTopic}
-            isRecordingActive={isRecording}
-          />
+
+          {conversationMode === "topics" && (
+            <TopicSelector
+              onTopicSelect={handleTopicSelect}
+              selectedTopic={selectedTopic}
+              isRecordingActive={isRecording}
+            />
+          )}
+
+          {conversationMode === "freeform" && (
+            <ConversationInterface onBack={handleBack} />
+          )}
         </div>
       );
     }
