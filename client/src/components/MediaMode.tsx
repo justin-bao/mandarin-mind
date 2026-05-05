@@ -375,7 +375,7 @@ export default function MediaMode() {
 
         {isLoading && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            {[0, 1, 2, 4].map((i) => (
+            {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-16 w-full rounded-lg" />
             ))}
           </div>

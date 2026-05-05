@@ -88,7 +88,7 @@ function MainApp({ user }: { user: AuthUser }) {
         );
       }
 
-      // topics / freeform landing — original structure preserved, max-w added
+      // topics / freeform landing
       return (
         <div className="p-4 space-y-6 max-w-5xl mx-auto">
           <div className="flex justify-between items-center">
