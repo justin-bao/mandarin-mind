@@ -1,4 +1,4 @@
-import { eq, desc, asc } from "drizzle-orm";
+import { eq, desc, asc, and } from "drizzle-orm";
 import { db } from "./db";
 import {
   users, conversations, messages, practiceWords, phraseLists, phraseListItems, mediaItems,
@@ -9,6 +9,7 @@ import {
   type PhraseList, type InsertPhraseList,
   type PhraseListItem, type InsertPhraseListItem,
   type MediaItem, type InsertMediaItem,
+  type OcrBlock, type Caption,
 } from "@shared/schema";
 
 export interface IStorage {
@@ -41,9 +42,10 @@ export interface IStorage {
 
   // Phrase List Items
   getPhraseListItems(listId: string): Promise<PhraseListItem[]>;
+  getPhraseListItem(id: string, listId: string): Promise<PhraseListItem | undefined>;
   createPhraseListItem(item: InsertPhraseListItem): Promise<PhraseListItem>;
-  updatePhraseListItem(id: string, updates: Partial<PhraseListItem>): Promise<PhraseListItem>;
-  deletePhraseListItem(id: string): Promise<void>;
+  updatePhraseListItem(id: string, listId: string, updates: Partial<PhraseListItem>): Promise<PhraseListItem>;
+  deletePhraseListItem(id: string, listId: string): Promise<void>;
 
   // Media Items
   getMediaItems(userId: string): Promise<MediaItem[]>;
@@ -76,8 +78,7 @@ export class DbStorage implements IStorage {
     const [conv] = await db
       .select()
       .from(conversations)
-      .where(eq(conversations.id, id));
-    if (!conv || conv.userId !== userId) return undefined;
+      .where(and(eq(conversations.id, id), eq(conversations.userId, userId)));
     return conv;
   }
 
@@ -122,7 +123,6 @@ export class DbStorage implements IStorage {
       ...insertMessage,
       isUser: insertMessage.isUser as 0 | 1,
     }).returning();
-    // Update conversation message count
     const convMessages = await this.getMessagesByConversationId(insertMessage.conversationId);
     await db
       .update(conversations)
@@ -149,7 +149,7 @@ export class DbStorage implements IStorage {
   async deletePracticeWord(id: string, userId: string): Promise<void> {
     await db
       .delete(practiceWords)
-      .where(eq(practiceWords.id, id));
+      .where(and(eq(practiceWords.id, id), eq(practiceWords.userId, userId)));
   }
 
   // ─── Phrase Lists ─────────────────────────────────────────────────────────
@@ -163,8 +163,10 @@ export class DbStorage implements IStorage {
   }
 
   async getPhraseList(id: string, userId: string): Promise<PhraseList | undefined> {
-    const [list] = await db.select().from(phraseLists).where(eq(phraseLists.id, id));
-    if (!list || list.userId !== userId) return undefined;
+    const [list] = await db
+      .select()
+      .from(phraseLists)
+      .where(and(eq(phraseLists.id, id), eq(phraseLists.userId, userId)));
     return list;
   }
 
@@ -177,14 +179,16 @@ export class DbStorage implements IStorage {
     const [list] = await db
       .update(phraseLists)
       .set({ ...updates, updatedAt: new Date() })
-      .where(eq(phraseLists.id, id))
+      .where(and(eq(phraseLists.id, id), eq(phraseLists.userId, userId)))
       .returning();
     if (!list) throw new Error(`Phrase list ${id} not found`);
     return list;
   }
 
   async deletePhraseList(id: string, userId: string): Promise<void> {
-    await db.delete(phraseLists).where(eq(phraseLists.id, id));
+    await db
+      .delete(phraseLists)
+      .where(and(eq(phraseLists.id, id), eq(phraseLists.userId, userId)));
   }
 
   // ─── Phrase List Items ────────────────────────────────────────────────────
@@ -197,23 +201,33 @@ export class DbStorage implements IStorage {
       .orderBy(asc(phraseListItems.createdAt));
   }
 
+  async getPhraseListItem(id: string, listId: string): Promise<PhraseListItem | undefined> {
+    const [item] = await db
+      .select()
+      .from(phraseListItems)
+      .where(and(eq(phraseListItems.id, id), eq(phraseListItems.listId, listId)));
+    return item;
+  }
+
   async createPhraseListItem(insertItem: InsertPhraseListItem): Promise<PhraseListItem> {
     const [item] = await db.insert(phraseListItems).values(insertItem).returning();
     return item;
   }
 
-  async updatePhraseListItem(id: string, updates: Partial<PhraseListItem>): Promise<PhraseListItem> {
+  async updatePhraseListItem(id: string, listId: string, updates: Partial<PhraseListItem>): Promise<PhraseListItem> {
     const [item] = await db
       .update(phraseListItems)
       .set(updates)
-      .where(eq(phraseListItems.id, id))
+      .where(and(eq(phraseListItems.id, id), eq(phraseListItems.listId, listId)))
       .returning();
     if (!item) throw new Error(`Phrase list item ${id} not found`);
     return item;
   }
 
-  async deletePhraseListItem(id: string): Promise<void> {
-    await db.delete(phraseListItems).where(eq(phraseListItems.id, id));
+  async deletePhraseListItem(id: string, listId: string): Promise<void> {
+    await db
+      .delete(phraseListItems)
+      .where(and(eq(phraseListItems.id, id), eq(phraseListItems.listId, listId)));
   }
 
   // ─── Media Items ──────────────────────────────────────────────────────────
@@ -227,8 +241,10 @@ export class DbStorage implements IStorage {
   }
 
   async getMediaItem(id: string, userId: string): Promise<MediaItem | undefined> {
-    const [item] = await db.select().from(mediaItems).where(eq(mediaItems.id, id));
-    if (!item || item.userId !== userId) return undefined;
+    const [item] = await db
+      .select()
+      .from(mediaItems)
+      .where(and(eq(mediaItems.id, id), eq(mediaItems.userId, userId)));
     return item;
   }
 
@@ -239,14 +255,16 @@ export class DbStorage implements IStorage {
       originalName: insertItem.originalName,
       mimeType: insertItem.mimeType,
       fileUrl: insertItem.fileUrl,
-      ocrBlocks: (insertItem.ocrBlocks ?? null) as any,
-      captions: (insertItem.captions ?? null) as any,
+      ocrBlocks: (insertItem.ocrBlocks ?? null) as OcrBlock[] | null,
+      captions: (insertItem.captions ?? null) as Caption[] | null,
     }).returning();
     return item;
   }
 
   async deleteMediaItem(id: string, userId: string): Promise<void> {
-    await db.delete(mediaItems).where(eq(mediaItems.id, id));
+    await db
+      .delete(mediaItems)
+      .where(and(eq(mediaItems.id, id), eq(mediaItems.userId, userId)));
   }
 }
 

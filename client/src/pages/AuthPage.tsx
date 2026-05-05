@@ -26,8 +26,9 @@ export default function AuthPage() {
       });
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    onSuccess: (user) => {
+      queryClient.clear();
+      queryClient.setQueryData(["/api/auth/me"], user);
     },
     onError: (err: Error) => {
       toast({ title: "Login failed", description: err.message, variant: "destructive" });
@@ -42,8 +43,9 @@ export default function AuthPage() {
       });
       return res.json();
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    onSuccess: (user) => {
+      queryClient.clear();
+      queryClient.setQueryData(["/api/auth/me"], user);
     },
     onError: (err: Error) => {
       toast({ title: "Registration failed", description: err.message, variant: "destructive" });

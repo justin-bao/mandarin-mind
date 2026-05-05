@@ -344,7 +344,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const list = await storage.getPhraseList(req.params.listId, req.user!.id);
       if (!list) return res.status(404).json({ error: "Phrase list not found" });
-      const item = await storage.updatePhraseListItem(req.params.itemId, req.body);
+      const existing = await storage.getPhraseListItem(req.params.itemId, req.params.listId);
+      if (!existing) return res.status(404).json({ error: "Item not found in this list" });
+      const item = await storage.updatePhraseListItem(req.params.itemId, req.params.listId, req.body);
       res.json(item);
     } catch (error) {
       res.status(400).json({ error: "Failed to update phrase list item" });
@@ -353,7 +355,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.delete("/api/phrase-lists/:listId/items/:itemId", requireAuth, async (req: Request, res: Response) => {
     try {
-      await storage.deletePhraseListItem(req.params.itemId);
+      const list = await storage.getPhraseList(req.params.listId, req.user!.id);
+      if (!list) return res.status(404).json({ error: "Phrase list not found" });
+      const existing = await storage.getPhraseListItem(req.params.itemId, req.params.listId);
+      if (!existing) return res.status(404).json({ error: "Item not found in this list" });
+      await storage.deletePhraseListItem(req.params.itemId, req.params.listId);
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete phrase list item" });

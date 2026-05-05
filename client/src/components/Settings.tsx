@@ -37,7 +37,8 @@ export default function Settings({ user }: SettingsProps) {
   const logoutMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/auth/logout"),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.clear();
+      queryClient.setQueryData(["/api/auth/me"], null);
     },
     onError: () => {
       toast({ title: "Logout failed", variant: "destructive" });
