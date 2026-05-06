@@ -2,8 +2,10 @@ import express, { type Request, Response, NextFunction } from "express";
 import session from "express-session";
 import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
+import { Strategy as GoogleStrategy } from "passport-google-oauth20";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
+import { randomUUID } from "crypto";
 import { registerRoutes } from "./routes.js";
 import { log } from "./log.js";
 import { storage } from "./storage.js";
@@ -56,6 +58,53 @@ function configurePassport() {
       }
     })
   );
+
+  if (process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET) {
+    passport.use(
+      new GoogleStrategy(
+        {
+          clientID: process.env.GOOGLE_CLIENT_ID,
+          clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+          callbackURL: process.env.GOOGLE_CALLBACK_URL || "/api/auth/google/callback",
+        },
+        async (_accessToken, _refreshToken, profile, done) => {
+          try {
+            const emailRecord = profile.emails?.find((email) => email.verified);
+            const email = emailRecord?.value?.toLowerCase().trim();
+            if (!email) {
+              return done(null, false, { message: "Google account did not provide a verified email address" });
+            }
+
+            const existingGoogleUser = await storage.getUserByGoogleId(profile.id);
+            if (existingGoogleUser) {
+              const { passwordHash: _, ...safeUser } = existingGoogleUser;
+              return done(null, safeUser);
+            }
+
+            const existingEmailUser = await storage.getUserByEmail(email);
+            if (existingEmailUser) {
+              const linkedUser = existingEmailUser.googleId
+                ? existingEmailUser
+                : await storage.linkUserToGoogle(existingEmailUser.id, profile.id);
+              const { passwordHash: _, ...safeUser } = linkedUser;
+              return done(null, safeUser);
+            }
+
+            const passwordHash = await bcrypt.hash(`google-oauth:${randomUUID()}`, 12);
+            const user = await storage.createUser({
+              email,
+              passwordHash,
+              googleId: profile.id,
+            });
+            const { passwordHash: _, ...safeUser } = user;
+            return done(null, safeUser);
+          } catch (err) {
+            return done(err);
+          }
+        }
+      )
+    );
+  }
 
   passport.serializeUser((user, done) => {
     done(null, (user as Express.User).id);

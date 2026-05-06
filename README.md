@@ -55,6 +55,18 @@ PORT=5000
 
 `PORT` is optional and defaults to `5000`.
 
+Google sign-in is optional. To enable it, create an OAuth client in Google Cloud
+Console and add:
+
+```bash
+GOOGLE_CLIENT_ID=your_google_oauth_client_id
+GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
+GOOGLE_CALLBACK_URL=http://localhost:5000/api/auth/google/callback
+```
+
+For production, set `GOOGLE_CALLBACK_URL` to your deployed origin plus
+`/api/auth/google/callback`.
+
 The server exits on startup if any required environment variable is missing. `GROQ_API_KEY` is required by the current startup check even though it is only used by the media caption workflow.
 
 ### Set Up the Database
@@ -88,6 +100,9 @@ DATABASE_URL=postgresql://user:password@host:5432/database
 OPENAI_API_KEY=your_openai_api_key
 GROQ_API_KEY=your_groq_api_key
 SESSION_SECRET=replace_with_a_long_random_secret
+GOOGLE_CLIENT_ID=your_google_oauth_client_id
+GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
+GOOGLE_CALLBACK_URL=https://your-domain.example/api/auth/google/callback
 ```
 
 Vercel uses `npm run vercel-build`, which builds only the Vite client into `dist/public`. Requests to `/api/*` and `/uploads/*` are routed to the Express function; all other routes fall back to `index.html` for the React app.
@@ -123,7 +138,7 @@ shared/schema.ts        Drizzle schema and shared TypeScript types
 
 All data routes require authentication unless noted.
 
-- `POST /api/auth/register`, `POST /api/auth/login`, `POST /api/auth/logout`, `GET /api/auth/me`
+- `POST /api/auth/register`, `POST /api/auth/login`, `GET /api/auth/google`, `GET /api/auth/google/callback`, `POST /api/auth/logout`, `GET /api/auth/me`
 - `GET /api/conversations`, `POST /api/conversations`, `GET /api/conversations/:id`
 - `GET /api/conversations/:id/messages`
 - `POST /api/conversations/:id/audio`

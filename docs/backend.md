@@ -7,11 +7,13 @@ The backend is an Express application written in TypeScript. The main entrypoint
 ## Application Setup
 
 - `server/app.ts` validates required environment variables, configures Passport local
-  auth, creates the Express app, installs JSON/body parsing, configures
+  auth plus optional Google OAuth, creates the Express app, installs JSON/body parsing, configures
   `express-session` with PostgreSQL-backed sessions, initializes Passport, attaches
   API logging, registers routes, and installs centralized error handling.
 - Required runtime env vars are `OPENAI_API_KEY`, `GROQ_API_KEY`, `DATABASE_URL`, and
   `SESSION_SECRET`.
+- Optional Google sign-in uses `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and
+  `GOOGLE_CALLBACK_URL`.
 - In Vercel, `trust proxy` and secure cookies are enabled.
 
 ## Data Model
@@ -32,12 +34,16 @@ The backend is an Express application written in TypeScript. The main entrypoint
 ## Authentication
 
 - `server/app.ts` configures Passport's local strategy with `email` as the username
-  field.
+  field and registers Google OAuth when the Google env vars are present.
 - Login normalizes email, loads the user from storage, compares the password with
   bcrypt, and serializes only the safe user shape into the session.
+- Google login finds users by `google_id`, links an existing account by verified email,
+  or creates a new account with an unusable generated password hash.
 - `server/routes.ts` exposes:
   - `POST /api/auth/register`
   - `POST /api/auth/login`
+  - `GET /api/auth/google`
+  - `GET /api/auth/google/callback`
   - `POST /api/auth/logout`
   - `GET /api/auth/me`
 - `requireAuth` protects all user-data and AI/media routes.

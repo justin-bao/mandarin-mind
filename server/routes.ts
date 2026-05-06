@@ -77,6 +77,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // ─── Auth endpoints (no requireAuth) ─────────────────────────────────────
 
+  const requireGoogleAuthConfig = (_req: Request, res: Response, next: NextFunction) => {
+    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
+      return res.status(503).json({ error: "Google sign-in is not configured" });
+    }
+    next();
+  };
+
   const registerSchema = z.object({
     email: z.string().email("Invalid email address"),
     password: z.string().min(8, "Password must be at least 8 characters"),
@@ -119,6 +126,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
     })(req, res, next);
   });
+
+  app.get(
+    "/api/auth/google",
+    requireGoogleAuthConfig,
+    passport.authenticate("google", { scope: ["profile", "email"] })
+  );
+
+  app.get(
+    "/api/auth/google/callback",
+    requireGoogleAuthConfig,
+    passport.authenticate("google", { failureRedirect: "/?auth=google_failed" }),
+    (_req: Request, res: Response) => {
+      res.redirect("/");
+    }
+  );
 
   app.post("/api/auth/logout", (req: Request, res: Response, next: NextFunction) => {
     req.logout((err) => {

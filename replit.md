@@ -53,7 +53,7 @@ Preferred communication style: Simple, everyday language.
 - Email + password registration and login (bcrypt, 12 rounds)
 - 30-day persistent sessions stored in PostgreSQL sessions table
 - All app data is private per user account; unauthenticated requests redirected to login page
-- Auth endpoints: POST /api/auth/register, /login, /logout; GET /api/auth/me
+- Auth endpoints: POST /api/auth/register, /login, /logout; GET /api/auth/me, /google, /google/callback
 - Settings tab shows logged-in email and Sign Out button
 
 **Data Models (PostgreSQL via Drizzle)**
@@ -129,3 +129,4 @@ Preferred communication style: Simple, everyday language.
 - OPENAI_API_KEY — OpenAI GPT + Whisper
 - GROQ_API_KEY — Groq Whisper for media captions
 - SESSION_SECRET — Express session
+- GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_CALLBACK_URL — optional Google OAuth sign-in

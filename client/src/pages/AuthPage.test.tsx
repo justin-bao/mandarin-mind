@@ -40,6 +40,12 @@ describe("AuthPage", () => {
     expect(fetch).toHaveBeenCalledWith("/api/auth/login", expect.objectContaining({ method: "POST" }));
   });
 
+  it("shows a Google sign-in option", () => {
+    renderAuthPage();
+
+    expect(screen.getByTestId("button-google-login")).toHaveTextContent("Continue with Google");
+  });
+
   it("prevents registration when password confirmation does not match", async () => {
     vi.stubGlobal("fetch", vi.fn());
     renderAuthPage();

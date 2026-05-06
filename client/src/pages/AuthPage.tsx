@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { Languages } from "lucide-react";
+import { FaGoogle } from "react-icons/fa";
 
 export default function AuthPage() {
   const { toast } = useToast();
@@ -74,6 +75,10 @@ export default function AuthPage() {
     registerMutation.mutate();
   };
 
+  const handleGoogleSignIn = () => {
+    window.location.href = "/api/auth/google";
+  };
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
       <div className="w-full max-w-sm space-y-6">
@@ -88,6 +93,23 @@ export default function AuthPage() {
         </div>
 
         <Card className="p-4">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full gap-2"
+            onClick={handleGoogleSignIn}
+            data-testid="button-google-login"
+          >
+            <FaGoogle className="h-4 w-4" aria-hidden="true" />
+            Continue with Google
+          </Button>
+
+          <div className="my-4 flex items-center gap-3">
+            <div className="h-px flex-1 bg-border" />
+            <span className="text-xs text-muted-foreground">or</span>
+            <div className="h-px flex-1 bg-border" />
+          </div>
+
           <Tabs defaultValue="login">
             <TabsList className="w-full mb-4">
               <TabsTrigger value="login" className="flex-1">Sign In</TabsTrigger>

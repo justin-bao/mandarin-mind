@@ -7,7 +7,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const storageMock = vi.hoisted(() => ({
   getUserByEmail: vi.fn(),
+  getUserByGoogleId: vi.fn(),
   createUser: vi.fn(),
+  linkUserToGoogle: vi.fn(),
   getConversations: vi.fn(),
   createConversation: vi.fn(),
   getConversation: vi.fn(),
@@ -216,6 +218,20 @@ describe("API route integration", () => {
     expect(ok.body.email).toBe("user@example.com");
     expect(bad.status).toBe(401);
     expect(bad.body.error).toBe("Invalid email or password");
+  });
+
+  it("returns a clear error when Google auth is not configured", async () => {
+    const clientId = process.env.GOOGLE_CLIENT_ID;
+    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+    delete process.env.GOOGLE_CLIENT_ID;
+    delete process.env.GOOGLE_CLIENT_SECRET;
+
+    const res = await request(await buildApp(false)).get("/api/auth/google");
+
+    if (clientId) process.env.GOOGLE_CLIENT_ID = clientId;
+    if (clientSecret) process.env.GOOGLE_CLIENT_SECRET = clientSecret;
+    expect(res.status).toBe(503);
+    expect(res.body).toEqual({ error: "Google sign-in is not configured" });
   });
 
   it("creates conversations and guards message access by conversation ownership", async () => {
