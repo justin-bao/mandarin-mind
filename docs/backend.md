@@ -6,21 +6,19 @@ The backend is an Express application written in TypeScript. The main entrypoint
 
 ## Application Setup
 
-- `server/app.ts` validates required environment variables, configures Passport local
-  auth plus optional Google OAuth, creates the Express app, installs JSON/body parsing, configures
-  `express-session` with PostgreSQL-backed sessions, initializes Passport, attaches
-  API logging, registers routes, and installs centralized error handling.
-- Required runtime env vars are `OPENAI_API_KEY`, `GROQ_API_KEY`, `DATABASE_URL`, and
-  `SESSION_SECRET`.
-- Optional Google sign-in uses `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and
-  `GOOGLE_CALLBACK_URL`.
-- In Vercel, `trust proxy` and secure cookies are enabled.
+- `server/app.ts` validates required environment variables, creates the Express app,
+  installs JSON/body parsing, verifies Supabase bearer tokens, attaches API logging,
+  registers routes, and installs centralized error handling.
+- Required runtime env vars are `OPENAI_API_KEY`, `GROQ_API_KEY`, `DATABASE_URL`,
+  `SUPABASE_URL`, and `SUPABASE_ANON_KEY`. `SUPABASE_SERVICE_ROLE_KEY` is optional
+  but preferred on the server for Auth admin verification.
+- In Vercel, `trust proxy` is enabled.
 
 ## Data Model
 
 - `shared/schema.ts` defines Drizzle PostgreSQL tables and insert schemas.
 - Tables:
-  - `users`: email/password-hash accounts.
+  - `users`: app profile and AI usage budget rows keyed by Supabase Auth user id.
   - `conversations`: user-owned topic sessions with difficulty and message count.
   - `messages`: ordered user/assistant messages for each conversation.
   - `practice_words`: legacy standalone practice words.
@@ -33,18 +31,15 @@ The backend is an Express application written in TypeScript. The main entrypoint
 
 ## Authentication
 
-- `server/app.ts` configures Passport's local strategy with `email` as the username
-  field and registers Google OAuth when the Google env vars are present.
-- Login normalizes email, loads the user from storage, compares the password with
-  bcrypt, and serializes only the safe user shape into the session.
-- Google login finds users by `google_id`, links an existing account by verified email,
-  or creates a new account with an unusable generated password hash.
+- Supabase Auth owns sign-up, sign-in, OAuth, token refresh, and sign-out.
+- The frontend sends the current Supabase access token in `Authorization: Bearer ...`
+  for API requests.
+- `server/app.ts` verifies the token with Supabase, then upserts/loads the matching
+  app profile row in `users` using the Supabase Auth user id.
 - `server/routes.ts` exposes:
-  - `POST /api/auth/register`
-  - `POST /api/auth/login`
-  - `GET /api/auth/google`
-  - `GET /api/auth/google/callback`
-  - `POST /api/auth/logout`
+  - `POST /api/auth/register` and `POST /api/auth/login`, both deprecated with 410
+    responses because Supabase Auth handles those flows client-side.
+  - `POST /api/auth/logout`, a compatibility no-op.
   - `GET /api/auth/me`
 - `requireAuth` protects all user-data and AI/media routes.
 
@@ -103,7 +98,7 @@ The backend is an Express application written in TypeScript. The main entrypoint
 
 ## Files To Read First
 
-1. `server/app.ts` for process setup, sessions, Passport, and error handling.
+1. `server/app.ts` for process setup, Supabase token verification, and error handling.
 2. `server/routes.ts` for every HTTP API route.
 3. `server/storage.ts` for persistence behavior and ownership checks.
 4. `shared/schema.ts` for database tables and insert validation schemas.

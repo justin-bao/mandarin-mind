@@ -19,6 +19,7 @@ import {
 import { Loader2, Languages, Plus, CheckCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { translateApi, phraseListsApi } from "@/lib/api";
+import { getAuthHeaders } from "@/lib/supabase";
 import type { MediaItem, OcrBlock, PhraseList } from "@shared/schema";
 
 interface Props {
@@ -43,7 +44,7 @@ export default function ImageOCRViewer({ mediaItem }: Props) {
   const { data: phraseLists = [] } = useQuery<(PhraseList & { itemCount?: number })[]>({
     queryKey: ["/api/phrase-lists"],
     queryFn: async () => {
-      const res = await fetch("/api/phrase-lists");
+      const res = await fetch("/api/phrase-lists", { headers: await getAuthHeaders() });
       return res.json();
     },
   });

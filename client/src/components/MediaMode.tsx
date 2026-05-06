@@ -30,6 +30,7 @@ import {
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { useAiUsage } from "@/hooks/use-ai-usage";
+import { getAuthHeaders } from "@/lib/supabase";
 import type { MediaItem } from "@shared/schema";
 import ImageOCRViewer from "./ImageOCRViewer";
 import MediaCaptionPlayer from "./MediaCaptionPlayer";
@@ -114,7 +115,7 @@ async function uploadWithProgress(
   let steps = initialSteps.map((s) => ({ ...s }));
 
   try {
-    const res = await fetch(endpoint, { method: "POST", body: form });
+    const res = await fetch(endpoint, { method: "POST", headers: await getAuthHeaders(), body: form });
 
     if (!res.ok || !res.body) {
       const text = await res.text().catch(() => "Unknown error");
@@ -164,7 +165,7 @@ async function uploadWithProgress(
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function deleteMedia(id: string): Promise<void> {
-  const res = await fetch(`/api/media/${id}`, { method: "DELETE" });
+  const res = await fetch(`/api/media/${id}`, { method: "DELETE", headers: await getAuthHeaders() });
   if (!res.ok) throw new Error(await res.text());
 }
 
@@ -213,7 +214,7 @@ export default function MediaMode() {
   const { data: items = [], isLoading } = useQuery<MediaItem[]>({
     queryKey: ["/api/media"],
     queryFn: async () => {
-      const res = await fetch("/api/media");
+      const res = await fetch("/api/media", { headers: await getAuthHeaders() });
       if (!res.ok) throw new Error("Failed to fetch media");
       return res.json();
     },

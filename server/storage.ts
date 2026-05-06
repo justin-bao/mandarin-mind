@@ -25,9 +25,8 @@ export interface IStorage {
   // Users
   getUserById(id: string): Promise<User | undefined>;
   getUserByEmail(email: string): Promise<User | undefined>;
-  getUserByGoogleId(googleId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
-  linkUserToGoogle(id: string, googleId: string): Promise<User>;
+  upsertUserProfile(user: { id: string; email: string }): Promise<User>;
   getAiUsageSummary(userId: string): Promise<AiUsageSummary>;
   assertAiUsageWithinBudget(userId: string): Promise<void>;
   recordAiUsage(userId: string, charge: AiUsageCharge): Promise<AiUsageEvent>;
@@ -103,24 +102,60 @@ export class DbStorage implements IStorage {
     return user;
   }
 
-  async getUserByGoogleId(googleId: string): Promise<User | undefined> {
-    const [user] = await db.select().from(users).where(eq(users.googleId, googleId));
-    return user;
-  }
-
   async createUser(insertUser: InsertUser): Promise<User> {
     const [user] = await db.insert(users).values(insertUser).returning();
     return user;
   }
 
-  async linkUserToGoogle(id: string, googleId: string): Promise<User> {
-    const [user] = await db
-      .update(users)
-      .set({ googleId })
-      .where(eq(users.id, id))
-      .returning();
-    if (!user) throw new Error(`User ${id} not found`);
-    return user;
+  async upsertUserProfile(profile: { id: string; email: string }): Promise<User> {
+    try {
+      const [user] = await db
+        .insert(users)
+        .values({
+          id: profile.id,
+          email: profile.email,
+        })
+        .onConflictDoUpdate({
+          target: users.id,
+          set: { email: profile.email },
+        })
+        .returning();
+      return user;
+    } catch (error: any) {
+      if (error?.code !== "23505" || error?.constraint !== "users_email_unique") {
+        throw error;
+      }
+
+      return db.transaction(async (tx) => {
+        const [existing] = await tx.select().from(users).where(eq(users.email, profile.email));
+        if (!existing) throw error;
+        if (existing.id === profile.id) return existing;
+
+        const legacyEmail = `${profile.email}#legacy-${existing.id}`;
+        await tx.update(users).set({ email: legacyEmail }).where(eq(users.id, existing.id));
+
+        const [newUser] = await tx
+          .insert(users)
+          .values({
+            id: profile.id,
+            email: profile.email,
+            aiUsageBudgetUsdMicros: existing.aiUsageBudgetUsdMicros ?? 0,
+            aiUsageSpentUsdMicros: existing.aiUsageSpentUsdMicros ?? 0,
+            createdAt: existing.createdAt,
+          })
+          .returning();
+
+        await tx.update(conversations).set({ userId: profile.id }).where(eq(conversations.userId, existing.id));
+        await tx.update(practiceWords).set({ userId: profile.id }).where(eq(practiceWords.userId, existing.id));
+        await tx.update(phraseLists).set({ userId: profile.id }).where(eq(phraseLists.userId, existing.id));
+        await tx.update(mediaItems).set({ userId: profile.id }).where(eq(mediaItems.userId, existing.id));
+        await tx.update(flashcardSessions).set({ userId: profile.id }).where(eq(flashcardSessions.userId, existing.id));
+        await tx.update(aiUsageEvents).set({ userId: profile.id }).where(eq(aiUsageEvents.userId, existing.id));
+
+        await tx.delete(users).where(eq(users.id, existing.id));
+        return newUser;
+      });
+    }
   }
 
   async getAiUsageSummary(userId: string): Promise<AiUsageSummary> {

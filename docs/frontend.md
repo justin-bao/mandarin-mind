@@ -8,6 +8,7 @@ tab state machine.
 ## App Shell And Navigation
 
 - `AppShell` calls `/api/auth/me` through `getQueryFn({ on401: "returnNull" })`.
+  The query helper attaches the current Supabase access token when present.
   Unauthenticated users see `pages/AuthPage.tsx`; authenticated users enter `MainApp`.
 - `MainApp` owns the cross-feature UI state: active tab, conversation subtab,
   selected topic, selected conversation id, active conversation mode, practice words,
@@ -19,17 +20,21 @@ tab state machine.
 
 ## Authentication
 
-- `pages/AuthPage.tsx` contains sign-in and account creation tabs.
-- Login and registration use `apiRequest` from `lib/queryClient.ts`.
-- On success, React Query's `/api/auth/me` cache is populated and other query caches
-  are cleared so user-scoped data is refetched for the new session.
+- `pages/AuthPage.tsx` contains Supabase email/password sign-in, account creation,
+  and Google OAuth entry points.
+- Login, registration, Google OAuth, token refresh, and sign-out use the browser
+  Supabase client in `lib/supabase.ts`.
+- On auth changes, React Query invalidates `/api/auth/me` and clears other
+  user-scoped query data so the backend profile is refetched with the new token.
 - Client-side validation checks registration password confirmation and minimum length
   before sending the request.
 
 ## API Layer And Query Behavior
 
-- `lib/queryClient.ts` centralizes JSON fetches, cookie credentials, error handling,
+- `lib/queryClient.ts` centralizes JSON fetches, bearer auth headers, error handling,
   and React Query defaults.
+- `lib/supabase.ts` creates the browser Supabase client and exposes helpers for
+  reading the current access token and auth headers.
 - `lib/api.ts` groups typed-ish API helpers for conversations, practice words,
   phrase lists, phrase lookup, sentence translation, audio generation, microphone
   recording, and audio playback.

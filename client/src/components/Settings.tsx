@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -50,7 +51,10 @@ export default function Settings({ user }: SettingsProps) {
   const formatUsd = (usdMicros: number) => `$${(usdMicros / 1_000_000).toFixed(4)}`;
 
   const logoutMutation = useMutation({
-    mutationFn: () => apiRequest("POST", "/api/auth/logout"),
+    mutationFn: async () => {
+      const { error } = await supabase.auth.signOut();
+      if (error) throw error;
+    },
     onSuccess: () => {
       queryClient.setQueryData(["/api/auth/me"], null);
       queryClient.removeQueries({

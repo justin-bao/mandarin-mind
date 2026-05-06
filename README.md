@@ -4,7 +4,7 @@ MandarinMind is a full-stack Mandarin learning app for speech practice, phrase s
 
 ## Features
 
-- Email/password accounts with private per-user data
+- Supabase Auth email/password and Google sign-in with private per-user data
 - Topic-based and free-form Mandarin conversation practice
 - Browser audio recording, Mandarin transcription, AI tutor replies, pinyin, English translation, and generated speech playback
 - Conversation history with saved messages
@@ -17,7 +17,7 @@ MandarinMind is a full-stack Mandarin learning app for speech practice, phrase s
 ## Tech Stack
 
 - React 18, TypeScript, Vite
-- Express, Passport, express-session
+- Express with Supabase Auth bearer-token verification
 - PostgreSQL with Drizzle ORM
 - TanStack Query
 - Tailwind CSS, shadcn/ui, Radix UI, Lucide icons
@@ -32,6 +32,7 @@ MandarinMind is a full-stack Mandarin learning app for speech practice, phrase s
 - Node.js 20 or newer
 - npm
 - PostgreSQL database
+- Supabase project URL and anon key
 - OpenAI API key
 - Groq API key for video/audio captions
 
@@ -47,25 +48,20 @@ Create a `.env` file in the project root:
 
 ```bash
 DATABASE_URL=postgresql://user:password@host:5432/database
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 OPENAI_API_KEY=your_openai_api_key
 GROQ_API_KEY=your_groq_api_key
-SESSION_SECRET=replace_with_a_long_random_secret
 PORT=5000
 ```
 
 `PORT` is optional and defaults to `5000`.
 
-Google sign-in is optional. To enable it, create an OAuth client in Google Cloud
-Console and add:
-
-```bash
-GOOGLE_CLIENT_ID=your_google_oauth_client_id
-GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
-GOOGLE_CALLBACK_URL=http://localhost:5000/api/auth/google/callback
-```
-
-For production, set `GOOGLE_CALLBACK_URL` to your deployed origin plus
-`/api/auth/google/callback`.
+Google sign-in is configured in the Supabase Auth dashboard. Add your local and
+production app origins to the allowed redirect URLs there.
 
 The server exits on startup if any required environment variable is missing. `GROQ_API_KEY` is required by the current startup check even though it is only used by the media caption workflow.
 
@@ -77,7 +73,7 @@ Push the Drizzle schema to your PostgreSQL database:
 npm run db:push
 ```
 
-This creates the application tables from [shared/schema.ts](/Users/Justin/personal_projects/mandarin-mind/shared/schema.ts). Session storage is created automatically by `connect-pg-simple` when the server starts.
+This creates the application tables from [shared/schema.ts](/Users/Justin/personal_projects/mandarin-mind/shared/schema.ts). The `users` table is an app profile table keyed by Supabase Auth user ids.
 
 ### Run in Development
 
@@ -97,12 +93,13 @@ In Vercel project settings, set these environment variables for the environments
 
 ```bash
 DATABASE_URL=postgresql://user:password@host:5432/database
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your_supabase_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_supabase_service_role_key
+VITE_SUPABASE_URL=https://your-project.supabase.co
+VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
 OPENAI_API_KEY=your_openai_api_key
 GROQ_API_KEY=your_groq_api_key
-SESSION_SECRET=replace_with_a_long_random_secret
-GOOGLE_CLIENT_ID=your_google_oauth_client_id
-GOOGLE_CLIENT_SECRET=your_google_oauth_client_secret
-GOOGLE_CALLBACK_URL=https://your-domain.example/api/auth/google/callback
 ```
 
 Vercel uses `npm run vercel-build`, which builds only the Vite client into `dist/public`. Requests to `/api/*` and `/uploads/*` are routed to the Express function; all other routes fall back to `index.html` for the React app.

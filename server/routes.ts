@@ -4,8 +4,6 @@ import multer from "multer";
 import path from "path";
 import fs from "fs";
 import { randomUUID } from "crypto";
-import bcrypt from "bcryptjs";
-import passport from "passport";
 import { storage } from "./storage.js";
 import { mandarinTutorService } from "./openai.js";
 import { lookupPhrase, translateSentence } from "./translation.js";
@@ -32,7 +30,7 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 
 // ─── Auth middleware ──────────────────────────────────────────────────────────
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
-  if (req.isAuthenticated()) return next();
+  if (req.user) return next();
   res.status(401).json({ error: "Unauthorized" });
 }
 
@@ -80,86 +78,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
     next();
   });
 
-  // ─── Auth endpoints (no requireAuth) ─────────────────────────────────────
-
-  const requireGoogleAuthConfig = (_req: Request, res: Response, next: NextFunction) => {
-    if (!process.env.GOOGLE_CLIENT_ID || !process.env.GOOGLE_CLIENT_SECRET) {
-      return res.status(503).json({ error: "Google sign-in is not configured" });
-    }
-    next();
-  };
-
-  const registerSchema = z.object({
-    email: z.string().email("Invalid email address"),
-    password: z.string().min(8, "Password must be at least 8 characters"),
+  // ─── Auth endpoints ──────────────────────────────────────────────────────
+  // Supabase Auth owns sign-up, sign-in, OAuth, and token refresh on the client.
+  // The backend only verifies bearer tokens and returns the app profile.
+  app.post("/api/auth/register", (_req: Request, res: Response) => {
+    res.status(410).json({ error: "Use Supabase Auth for registration" });
   });
 
-  app.post("/api/auth/register", async (req: Request, res: Response) => {
-    try {
-      const { email, password } = registerSchema.parse(req.body);
-      const normalizedEmail = email.toLowerCase().trim();
-
-      const existing = await storage.getUserByEmail(normalizedEmail);
-      if (existing) {
-        return res.status(409).json({ error: "An account with that email already exists" });
-      }
-
-      const passwordHash = await bcrypt.hash(password, 12);
-      const user = await storage.createUser({ email: normalizedEmail, passwordHash });
-      const { passwordHash: _, ...safeUser } = user;
-
-      req.login(safeUser, (err) => {
-        if (err) return res.status(500).json({ error: "Login after register failed" });
-        res.json(safeUser);
-      });
-    } catch (error) {
-      if (error instanceof z.ZodError) {
-        return res.status(400).json({ error: error.errors[0].message });
-      }
-      console.error("Register error:", error);
-      res.status(500).json({ error: "Registration failed" });
-    }
+  app.post("/api/auth/login", (_req: Request, res: Response) => {
+    res.status(410).json({ error: "Use Supabase Auth for login" });
   });
 
-  app.post("/api/auth/login", (req: Request, res: Response, next: NextFunction) => {
-    passport.authenticate("local", (err: any, user: any, info: any) => {
-      if (err) return next(err);
-      if (!user) return res.status(401).json({ error: info?.message || "Invalid email or password" });
-      req.login(user, (loginErr) => {
-        if (loginErr) return next(loginErr);
-        res.json(user);
-      });
-    })(req, res, next);
+  app.post("/api/auth/logout", (_req: Request, res: Response) => {
+    res.json({ success: true });
   });
 
-  app.get(
-    "/api/auth/google",
-    requireGoogleAuthConfig,
-    passport.authenticate("google", { scope: ["profile", "email"] })
-  );
-
-  app.get(
-    "/api/auth/google/callback",
-    requireGoogleAuthConfig,
-    passport.authenticate("google", { failureRedirect: "/?auth=google_failed" }),
-    (_req: Request, res: Response) => {
-      res.redirect("/");
-    }
-  );
-
-  app.post("/api/auth/logout", (req: Request, res: Response, next: NextFunction) => {
-    req.logout((err) => {
-      if (err) return next(err);
-      req.session.destroy((destroyErr) => {
-        if (destroyErr) return next(destroyErr);
-        res.clearCookie("connect.sid");
-        res.json({ success: true });
-      });
-    });
-  });
-
-  app.get("/api/auth/me", (req: Request, res: Response) => {
-    if (!req.isAuthenticated()) return res.status(401).json({ error: "Unauthorized" });
+  app.get("/api/auth/me", requireAuth, (req: Request, res: Response) => {
     res.json(req.user);
   });
 

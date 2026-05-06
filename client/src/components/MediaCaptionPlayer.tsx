@@ -18,6 +18,7 @@ import {
 import { Loader2, Languages, Plus, CheckCircle, Subtitles } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { translateApi, phraseListsApi } from "@/lib/api";
+import { getAuthHeaders } from "@/lib/supabase";
 import type { MediaItem, Caption, PhraseList } from "@shared/schema";
 
 interface Props {
@@ -42,7 +43,7 @@ export default function MediaCaptionPlayer({ mediaItem }: Props) {
 
   const { data: phraseLists = [] } = useQuery<(PhraseList & { itemCount?: number })[]>({
     queryKey: ["/api/phrase-lists"],
-    queryFn: async () => (await fetch("/api/phrase-lists")).json(),
+    queryFn: async () => (await fetch("/api/phrase-lists", { headers: await getAuthHeaders() })).json(),
   });
 
   const addItemMutation = useMutation({

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient } from "@/lib/queryClient";
+import { supabase } from "@/lib/supabase";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -21,14 +22,15 @@ export default function AuthPage() {
 
   const loginMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/auth/login", {
+      const { data, error } = await supabase.auth.signInWithPassword({
         email: loginEmail.trim(),
         password: loginPassword,
       });
-      return res.json();
+      if (error) throw error;
+      return data.user;
     },
-    onSuccess: (user) => {
-      queryClient.setQueryData(["/api/auth/me"], user);
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       queryClient.removeQueries({
         predicate: (q) => q.queryKey[0] !== "/api/auth/me",
       });
@@ -40,14 +42,18 @@ export default function AuthPage() {
 
   const registerMutation = useMutation({
     mutationFn: async () => {
-      const res = await apiRequest("POST", "/api/auth/register", {
+      const { data, error } = await supabase.auth.signUp({
         email: registerEmail.trim(),
         password: registerPassword,
       });
-      return res.json();
+      if (error) throw error;
+      return data;
     },
-    onSuccess: (user) => {
-      queryClient.setQueryData(["/api/auth/me"], user);
+    onSuccess: (data) => {
+      if (!data.session) {
+        toast({ title: "Check your email", description: "Confirm your account, then sign in." });
+      }
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
       queryClient.removeQueries({
         predicate: (q) => q.queryKey[0] !== "/api/auth/me",
       });
@@ -75,8 +81,16 @@ export default function AuthPage() {
     registerMutation.mutate();
   };
 
-  const handleGoogleSignIn = () => {
-    window.location.href = "/api/auth/google";
+  const handleGoogleSignIn = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    if (error) {
+      toast({ title: "Google sign-in failed", description: error.message, variant: "destructive" });
+    }
   };
 
   return (

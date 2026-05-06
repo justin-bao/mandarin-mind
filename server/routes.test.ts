@@ -7,9 +7,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const storageMock = vi.hoisted(() => ({
   getUserByEmail: vi.fn(),
-  getUserByGoogleId: vi.fn(),
   createUser: vi.fn(),
-  linkUserToGoogle: vi.fn(),
+  upsertUserProfile: vi.fn(),
   getAiUsageSummary: vi.fn(),
   assertAiUsageWithinBudget: vi.fn(),
   recordAiUsage: vi.fn(),
@@ -71,47 +70,24 @@ vi.mock("./media.js", () => ({
   generateCaptions: vi.fn().mockResolvedValue([{ startMs: 0, endMs: 1000, chinese: "你好", english: "hello" }]),
 }));
 
-vi.mock("passport", () => ({
-  default: {
-    authenticate:
-      (_strategy: string, callback: (err: unknown, user: unknown, info?: { message: string }) => void) =>
-      (req: Request, _res: Response, _next: NextFunction) => {
-        if (req.body.email === "user@example.com" && req.body.password === "correct-password") {
-          callback(null, { id: "user-1", email: "user@example.com", createdAt: null });
-          return;
-        }
-        callback(null, false, { message: "Invalid email or password" });
-      },
-  },
-}));
-
 process.env.UPLOADS_DIR = path.join(os.tmpdir(), `mandarin-mind-test-uploads-${process.pid}`);
 
 const { registerRoutes } = await import("./routes.js");
 
 async function buildApp(authenticated = true) {
   const app = express();
-  let isAuthenticated = authenticated;
   app.use(express.json());
   app.use(express.urlencoded({ extended: false }));
   app.use((req: Request, _res: Response, next: NextFunction) => {
-    req.isAuthenticated = () => isAuthenticated;
-    req.user = { id: "user-1", email: "user@example.com", createdAt: null };
-    req.login = (user: Express.User, done: (err?: unknown) => void) => {
-      req.user = user;
-      isAuthenticated = true;
-      done();
-    };
-    req.logout = (done: (err?: unknown) => void) => {
-      isAuthenticated = false;
-      done();
-    };
-    req.session = {
-      destroy: (done: (err?: unknown) => void) => {
-        isAuthenticated = false;
-        done();
-      },
-    } as Request["session"];
+    if (authenticated) {
+      req.user = {
+        id: "user-1",
+        email: "user@example.com",
+        aiUsageBudgetUsdMicros: 0,
+        aiUsageSpentUsdMicros: 0,
+        createdAt: null,
+      };
+    }
     next();
   });
   await registerRoutes(app);
@@ -121,14 +97,6 @@ async function buildApp(authenticated = true) {
 beforeEach(() => {
   Object.values(storageMock).forEach((mock) => mock.mockReset());
   storageMock.getUserByEmail.mockResolvedValue(undefined);
-  storageMock.createUser.mockResolvedValue({
-    id: "user-1",
-    email: "user@example.com",
-    passwordHash: "hashed-password",
-    aiUsageBudgetUsdMicros: 0,
-    aiUsageSpentUsdMicros: 0,
-    createdAt: null,
-  });
   storageMock.getAiUsageSummary.mockResolvedValue({
     budgetUsdMicros: 0,
     spentUsdMicros: 0,
@@ -202,17 +170,10 @@ describe("API route integration", () => {
     expect(res.body).toEqual({ error: "Unauthorized" });
   });
 
-  it("registers a user with normalized email and omits passwordHash from the response", async () => {
-    const res = await request(await buildApp(false))
-      .post("/api/auth/register")
-      .send({ email: "USER@EXAMPLE.COM", password: "correct-password" });
+  it("returns the authenticated Supabase-backed app profile", async () => {
+    const res = await request(await buildApp(true)).get("/api/auth/me");
 
     expect(res.status).toBe(200);
-    expect(storageMock.getUserByEmail).toHaveBeenCalledWith("user@example.com");
-    expect(storageMock.createUser).toHaveBeenCalledWith({
-      email: "user@example.com",
-      passwordHash: expect.any(String),
-    });
     expect(res.body).toEqual({
       id: "user-1",
       email: "user@example.com",
@@ -220,34 +181,6 @@ describe("API route integration", () => {
       aiUsageSpentUsdMicros: 0,
       createdAt: null,
     });
-  });
-
-  it("logs in valid credentials and rejects invalid credentials", async () => {
-    const ok = await request(await buildApp(false))
-      .post("/api/auth/login")
-      .send({ email: "user@example.com", password: "correct-password" });
-    const bad = await request(await buildApp(false))
-      .post("/api/auth/login")
-      .send({ email: "user@example.com", password: "wrong-password" });
-
-    expect(ok.status).toBe(200);
-    expect(ok.body.email).toBe("user@example.com");
-    expect(bad.status).toBe(401);
-    expect(bad.body.error).toBe("Invalid email or password");
-  });
-
-  it("returns a clear error when Google auth is not configured", async () => {
-    const clientId = process.env.GOOGLE_CLIENT_ID;
-    const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
-    delete process.env.GOOGLE_CLIENT_ID;
-    delete process.env.GOOGLE_CLIENT_SECRET;
-
-    const res = await request(await buildApp(false)).get("/api/auth/google");
-
-    if (clientId) process.env.GOOGLE_CLIENT_ID = clientId;
-    if (clientSecret) process.env.GOOGLE_CLIENT_SECRET = clientSecret;
-    expect(res.status).toBe(503);
-    expect(res.body).toEqual({ error: "Google sign-in is not configured" });
   });
 
   it("creates conversations and guards message access by conversation ownership", async () => {

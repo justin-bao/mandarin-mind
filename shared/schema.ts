@@ -7,8 +7,6 @@ import { z } from "zod";
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
   email: text("email").notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
-  googleId: text("google_id").unique(),
   aiUsageBudgetUsdMicros: bigint("ai_usage_budget_usd_micros", { mode: "number" }).notNull().default(0),
   aiUsageSpentUsdMicros: bigint("ai_usage_spent_usd_micros", { mode: "number" }).notNull().default(0),
   createdAt: timestamp("created_at").defaultNow(),

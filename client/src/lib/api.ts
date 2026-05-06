@@ -1,4 +1,5 @@
 import { apiRequest } from "./queryClient";
+import { getAuthHeaders } from "./supabase";
 
 // Audio recording utilities
 export const startAudioRecording = (): Promise<MediaRecorder> => {
@@ -54,9 +55,11 @@ export const conversationApi = {
   sendAudio: async (id: string, audioBlob: Blob) => {
     const formData = new FormData();
     formData.append('audio', audioBlob, 'recording.webm');
+    const authHeaders = await getAuthHeaders();
     
     const response = await fetch(`/api/conversations/${id}/audio`, {
       method: 'POST',
+      headers: authHeaders,
       body: formData,
       credentials: 'include'
     });

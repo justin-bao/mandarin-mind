@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient, getQueryFn } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
@@ -8,6 +8,7 @@ import { SidebarProvider } from "@/components/ui/sidebar";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/AuthPage";
 import { AppSidebar } from "@/components/AppSidebar";
+import { supabase } from "@/lib/supabase";
 
 import TopicSelector from "@/components/TopicSelector";
 import PhraseListsManager from "@/components/PhraseListsManager";
@@ -241,6 +242,13 @@ function MainApp({ user }: { user: AuthUser }) {
 
 function AppShell() {
   const { data: user, isLoading } = useCurrentUser();
+
+  useEffect(() => {
+    const { data } = supabase.auth.onAuthStateChange(() => {
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+    });
+    return () => data.subscription.unsubscribe();
+  }, []);
 
   if (isLoading) {
     return (

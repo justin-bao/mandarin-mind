@@ -21,8 +21,9 @@ Preferred communication style: Simple, everyday language.
 - Express.js server with TypeScript support
 - RESTful API design with structured route handlers
 - PostgreSQL database via Drizzle ORM (node-postgres driver) — all data persisted permanently
-- express-session + connect-pg-simple for session storage; passport-local + bcryptjs for auth
-- requireAuth middleware protecting all data API routes; auth endpoints public
+- Supabase Auth for email/password, OAuth, token refresh, and sign-out
+- Backend verifies Supabase bearer tokens and upserts an app profile row before route handling
+- requireAuth middleware protecting all data API routes
 - File upload handling via multer: audio (memory, 10 MB) for conversation; image/video/audio (disk, 100 MB) for media mode
 - Static file serving from server/uploads/ at /uploads/ route
 
@@ -50,14 +51,14 @@ Preferred communication style: Simple, everyday language.
 - "Add to phrase list" action available from both OCR viewer and caption player
 
 **Authentication**
-- Email + password registration and login (bcrypt, 12 rounds)
-- 30-day persistent sessions stored in PostgreSQL sessions table
+- Supabase Auth email/password and Google OAuth
+- Frontend sends Supabase access tokens as API bearer tokens
 - All app data is private per user account; unauthenticated requests redirected to login page
-- Auth endpoints: POST /api/auth/register, /login, /logout; GET /api/auth/me, /google, /google/callback
+- Auth endpoints: GET /api/auth/me for app profile; Supabase owns login/register/OAuth/logout
 - Settings tab shows logged-in email and Sign Out button
 
 **Data Models (PostgreSQL via Drizzle)**
-- Users: id, email (unique), passwordHash, createdAt
+- Users: id (Supabase Auth user id), email (unique), AI usage budget/spend, createdAt
 - Conversations: userId FK, topic, difficulty, duration, messageCount
 - Messages: conversationId FK, text, pinyin, translation, isUser, audioUrl
 - Practice Words: userId FK, chinese, pinyin, english
@@ -122,11 +123,12 @@ Preferred communication style: Simple, everyday language.
 
 **Database and Storage**
 - PostgreSQL database (configured for Neon Database)
-- connect-pg-simple for session storage
 - Drizzle Kit for database migrations and schema management
 
 ## Environment Variables Required
 - OPENAI_API_KEY — OpenAI GPT + Whisper
 - GROQ_API_KEY — Groq Whisper for media captions
-- SESSION_SECRET — Express session
-- GOOGLE_CLIENT_ID / GOOGLE_CLIENT_SECRET / GOOGLE_CALLBACK_URL — optional Google OAuth sign-in
+- DATABASE_URL — PostgreSQL connection string
+- SUPABASE_URL / SUPABASE_ANON_KEY — Supabase Auth verification
+- SUPABASE_SERVICE_ROLE_KEY — preferred server-side Supabase Auth key
+- VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY — browser Supabase client

@@ -1,3 +1,4 @@
+import "../server/env.js";
 import { createApp } from "../server/app.js";
 
 const appPromise = createApp().then(({ app }) => app);

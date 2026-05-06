@@ -36,6 +36,7 @@ describe("frontend API helpers", () => {
 
     expect(fetch).toHaveBeenCalledWith("/api/conversations/conv-1/audio", {
       method: "POST",
+      headers: {},
       body: expect.any(FormData),
       credentials: "include",
     });
