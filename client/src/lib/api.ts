@@ -128,6 +128,29 @@ export const phraseListsApi = {
   },
 };
 
+export const flashcardSessionsApi = {
+  getAll: async () => {
+    const res = await apiRequest('GET', '/api/flashcard-sessions');
+    return await res.json();
+  },
+  create: async (cards: { chinese: string; pinyin?: string; english: string; sourceListId?: string }[]) => {
+    const res = await apiRequest('POST', '/api/flashcard-sessions', { cards });
+    return await res.json();
+  },
+  updateCardStatus: async (
+    sessionId: string,
+    cardId: string,
+    status: 'known' | 'unknown' | 'pending'
+  ) => {
+    const res = await apiRequest('PATCH', `/api/flashcard-sessions/${sessionId}/cards/${cardId}`, { status });
+    return await res.json();
+  },
+  complete: async (sessionId: string) => {
+    const res = await apiRequest('PATCH', `/api/flashcard-sessions/${sessionId}/complete`);
+    return await res.json();
+  },
+};
+
 export const phraseLookupApi = {
   lookup: async (chinese: string): Promise<{ pinyin: string; english: string }> => {
     const res = await apiRequest('POST', '/api/phrases/lookup', { chinese });

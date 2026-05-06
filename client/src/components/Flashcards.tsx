@@ -1,11 +1,19 @@
 import { useState, useCallback, useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { phraseListsApi } from "@/lib/api";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { flashcardSessionsApi, phraseListsApi } from "@/lib/api";
 import { VOCAB_CATEGORIES, type VocabPhrase } from "@/data/vocab";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { useToast } from "@/hooks/use-toast";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   BookOpen,
   Compass,
@@ -17,19 +25,55 @@ import {
   TrendingUp,
   List,
   Eye,
+  History,
+  Plus,
 } from "lucide-react";
 import type { PhraseList, PhraseListItem } from "@shared/schema";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 type Mode = "list" | "discover";
-type Screen = "setup" | "loading" | "session" | "summary";
+type Screen = "setup" | "session" | "summary";
 type CardResult = "known" | "unknown";
+type FlashcardTab = "study" | "history";
+type FlashcardSessionCardStatus = CardResult | "pending";
 
 interface FlashCard {
   chinese: string;
   pinyin: string;
   english: string;
   sourceListId?: string;
+  sessionCardId?: string;
+}
+
+interface FlashcardSessionCard extends FlashCard {
+  id: string;
+  sessionId: string;
+  orderIndex: number;
+  status: FlashcardSessionCardStatus;
+  updatedAt: string;
+}
+
+interface FlashcardSession {
+  id: string;
+  startedAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+  cards: FlashcardSessionCard[];
+}
+
+function formatSessionDate(value: string) {
+  return new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(value));
+}
+
+function statusLabel(status: FlashcardSessionCardStatus) {
+  if (status === "known") return "Success";
+  if (status === "unknown") return "Fail";
+  return "Didn't get to it";
 }
 
 // ─── Shuffle utility ──────────────────────────────────────────────────────────
@@ -182,7 +226,7 @@ function ListSelectorCard({
 
 // ─── Setup screen ─────────────────────────────────────────────────────────────
 interface SetupProps {
-  onStart: (deck: FlashCard[]) => void;
+  onStart: (deck: FlashCard[]) => void | Promise<void>;
 }
 
 function SetupScreen({ onStart }: SetupProps) {
@@ -427,11 +471,12 @@ function SetupScreen({ onStart }: SetupProps) {
 // ─── Session screen ───────────────────────────────────────────────────────────
 interface SessionProps {
   deck: FlashCard[];
+  onCardRated: (cardIndex: number, result: CardResult) => void;
   onComplete: (results: CardResult[]) => void;
   onExit: () => void;
 }
 
-function SessionScreen({ deck, onComplete, onExit }: SessionProps) {
+function SessionScreen({ deck, onCardRated, onComplete, onExit }: SessionProps) {
   const [index, setIndex] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [results, setResults] = useState<CardResult[]>([]);
@@ -445,6 +490,7 @@ function SessionScreen({ deck, onComplete, onExit }: SessionProps) {
   const handleRate = useCallback(
     (result: CardResult) => {
       const newResults = [...results, result];
+      onCardRated(index, result);
       if (index + 1 >= deck.length) {
         onComplete(newResults);
       } else {
@@ -453,7 +499,7 @@ function SessionScreen({ deck, onComplete, onExit }: SessionProps) {
         setFlipped(false);
       }
     },
-    [results, index, deck.length, onComplete]
+    [results, index, deck.length, onCardRated, onComplete]
   );
 
   return (
@@ -476,7 +522,12 @@ function SessionScreen({ deck, onComplete, onExit }: SessionProps) {
 
       {/* Card */}
       <div className="flex-1 flex flex-col justify-center gap-4">
-        <FlipCard card={card} flipped={flipped} onFlip={handleFlip} />
+        <FlipCard
+          key={`${index}-${card.chinese}-${card.pinyin}`}
+          card={card}
+          flipped={flipped}
+          onFlip={handleFlip}
+        />
 
         {/* Rating buttons — only visible once flipped */}
         <div
@@ -640,39 +691,283 @@ function SummaryScreen({ deck, results, onReviewMissed, onRestart }: SummaryProp
   );
 }
 
+// ─── History screen ───────────────────────────────────────────────────────────
+function AddToPhraseListControl({
+  card,
+  lists,
+}: {
+  card: FlashCard;
+  lists: (PhraseList & { itemCount?: number })[];
+}) {
+  const [selectedListId, setSelectedListId] = useState("");
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
+
+  const addMutation = useMutation({
+    mutationFn: (listId: string) =>
+      phraseListsApi.addItem(listId, {
+        chinese: card.chinese,
+        pinyin: card.pinyin,
+        english: card.english,
+      }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/phrase-lists"] });
+      if (selectedListId) {
+        queryClient.invalidateQueries({
+          queryKey: ["/api/phrase-lists", selectedListId, "items"],
+        });
+      }
+      toast({ description: "Added to phrase list" });
+    },
+    onError: () => toast({ description: "Failed to add phrase", variant: "destructive" }),
+  });
+
+  if (lists.length === 0) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        Create a phrase list in Practice to save this card.
+      </p>
+    );
+  }
+
+  return (
+    <div className="flex flex-col sm:flex-row gap-2">
+      <Select value={selectedListId} onValueChange={setSelectedListId}>
+        <SelectTrigger className="sm:w-56">
+          <SelectValue placeholder="Choose phrase list" />
+        </SelectTrigger>
+        <SelectContent>
+          {lists.map((list) => (
+            <SelectItem key={list.id} value={list.id}>
+              {list.name}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={!selectedListId || addMutation.isPending}
+        onClick={() => addMutation.mutate(selectedListId)}
+      >
+        <Plus className="h-4 w-4 mr-2" />
+        Add
+      </Button>
+    </div>
+  );
+}
+
+function FlashcardHistoryScreen() {
+  const [selectedSessionId, setSelectedSessionId] = useState<string | null>(null);
+
+  const { data: lists = [] } = useQuery<(PhraseList & { itemCount: number })[]>({
+    queryKey: ["/api/phrase-lists"],
+    queryFn: phraseListsApi.getAll,
+  });
+
+  const {
+    data: sessions = [],
+    isLoading,
+    refetch,
+  } = useQuery<FlashcardSession[]>({
+    queryKey: ["/api/flashcard-sessions"],
+    queryFn: flashcardSessionsApi.getAll,
+  });
+
+  const selectedSession =
+    sessions.find((session) => session.id === selectedSessionId) ?? sessions[0];
+
+  return (
+    <div className="space-y-5">
+      <div>
+        <h2 className="text-xl font-semibold">Flashcard History</h2>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          Review past sessions and save useful cards into phrase lists.
+        </p>
+      </div>
+
+      {isLoading ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            Loading flashcard history...
+          </CardContent>
+        </Card>
+      ) : sessions.length === 0 ? (
+        <Card>
+          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+            <History className="h-8 w-8 mx-auto mb-2 opacity-40" />
+            No flashcard sessions yet.
+          </CardContent>
+        </Card>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-[18rem_1fr] gap-4">
+          <div className="space-y-2">
+            {sessions.map((session) => {
+              const success = session.cards.filter((card) => card.status === "known").length;
+              const fail = session.cards.filter((card) => card.status === "unknown").length;
+              const pending = session.cards.filter((card) => card.status === "pending").length;
+              return (
+                <button
+                  key={session.id}
+                  type="button"
+                  onClick={() => setSelectedSessionId(session.id)}
+                  className={`w-full text-left rounded-md border p-3 transition-colors hover-elevate ${
+                    selectedSession?.id === session.id
+                      ? "border-primary bg-primary/5 dark:bg-primary/10"
+                      : "border-border bg-card"
+                  }`}
+                >
+                  <div className="text-sm font-medium">
+                    {formatSessionDate(session.startedAt)}
+                  </div>
+                  <div className="text-xs text-muted-foreground mt-1">
+                    {success} success · {fail} fail · {pending} not reached
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {selectedSession && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div>
+                  <h3 className="font-semibold">
+                    {formatSessionDate(selectedSession.startedAt)}
+                  </h3>
+                  <p className="text-xs text-muted-foreground">
+                    {selectedSession.cards.length} cards
+                    {selectedSession.completedAt ? " · completed" : " · in progress or exited"}
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => refetch()}>
+                  Refresh
+                </Button>
+              </div>
+
+              <div className="space-y-2">
+                {selectedSession.cards.map((card, index) => (
+                  <Card key={`${selectedSession.id}-${index}-${card.chinese}`}>
+                    <CardContent className="p-4">
+                      <div className="flex flex-col lg:flex-row lg:items-center gap-3">
+                        <div className="flex-1 min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <div className="font-chinese text-2xl font-medium">
+                              {card.chinese}
+                            </div>
+                            <Badge
+                              variant={
+                                card.status === "known"
+                                  ? "default"
+                                  : card.status === "unknown"
+                                  ? "destructive"
+                                  : "secondary"
+                              }
+                            >
+                              {statusLabel(card.status)}
+                            </Badge>
+                          </div>
+                          <div className="text-sm text-primary italic mt-1">
+                            {card.pinyin || "No pinyin saved"}
+                          </div>
+                          <div className="text-sm text-muted-foreground mt-0.5">
+                            {card.english}
+                          </div>
+                        </div>
+                        <AddToPhraseListControl card={card} lists={lists} />
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Root component ───────────────────────────────────────────────────────────
 export default function Flashcards() {
+  const [activeTab, setActiveTab] = useState<FlashcardTab>("study");
   const [screen, setScreen] = useState<Screen>("setup");
   const [deck, setDeck] = useState<FlashCard[]>([]);
   const [results, setResults] = useState<CardResult[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [currentSessionCards, setCurrentSessionCards] = useState<FlashcardSessionCard[]>([]);
+  const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  const handleStart = useCallback((newDeck: FlashCard[]) => {
-    setDeck(newDeck);
-    setResults([]);
-    setScreen("session");
-  }, []);
+  const handleStart = useCallback(
+    async (newDeck: FlashCard[]) => {
+      try {
+        const session: FlashcardSession = await flashcardSessionsApi.create(newDeck);
+        const deckWithSessionIds = newDeck.map((card, index) => ({
+          ...card,
+          sessionCardId: session.cards[index]?.id,
+        }));
+        setCurrentSessionId(session.id);
+        setCurrentSessionCards(session.cards);
+        setDeck(deckWithSessionIds);
+        setResults([]);
+        setScreen("session");
+        queryClient.invalidateQueries({ queryKey: ["/api/flashcard-sessions"] });
+      } catch {
+        toast({ description: "Failed to save flashcard session", variant: "destructive" });
+      }
+    },
+    [queryClient, toast]
+  );
 
   const handleComplete = useCallback((res: CardResult[]) => {
+    if (currentSessionId) {
+      flashcardSessionsApi
+        .complete(currentSessionId)
+        .then(() => queryClient.invalidateQueries({ queryKey: ["/api/flashcard-sessions"] }))
+        .catch(() =>
+          toast({ description: "Failed to mark flashcard session complete", variant: "destructive" })
+        );
+    }
     setResults(res);
     setScreen("summary");
-  }, []);
+  }, [currentSessionId, queryClient, toast]);
 
-  const handleReviewMissed = useCallback((missed: FlashCard[]) => {
-    setDeck(shuffle(missed));
-    setResults([]);
-    setScreen("session");
-  }, []);
+  const handleReviewMissed = useCallback(
+    async (missed: FlashCard[]) => {
+      await handleStart(shuffle(missed));
+    },
+    [handleStart]
+  );
 
   const handleRestart = useCallback(() => {
     setDeck([]);
     setResults([]);
+    setCurrentSessionId(null);
+    setCurrentSessionCards([]);
     setScreen("setup");
   }, []);
+
+  const handleCardRated = useCallback(
+    (cardIndex: number, result: CardResult) => {
+      if (!currentSessionId) return;
+      const cardId = currentSessionCards[cardIndex]?.id ?? deck[cardIndex]?.sessionCardId;
+      if (!cardId) return;
+      flashcardSessionsApi
+        .updateCardStatus(currentSessionId, cardId, result)
+        .then(() => queryClient.invalidateQueries({ queryKey: ["/api/flashcard-sessions"] }))
+        .catch(() =>
+          toast({ description: "Failed to save flashcard result", variant: "destructive" })
+        );
+    },
+    [currentSessionId, currentSessionCards, deck, queryClient, toast]
+  );
 
   if (screen === "session") {
     return (
       <SessionScreen
         deck={deck}
+        onCardRated={handleCardRated}
         onComplete={handleComplete}
         onExit={() => setScreen("setup")}
       />
@@ -690,5 +985,38 @@ export default function Flashcards() {
     );
   }
 
-  return <SetupScreen onStart={handleStart} />;
+  return (
+    <div className="space-y-5">
+      <div className="flex border-b border-border bg-card -mx-4 px-4">
+        <button
+          className={`flex-1 py-3 text-sm font-medium transition-colors ${
+            activeTab === "study"
+              ? "text-foreground border-b-2 border-primary"
+              : "text-muted-foreground"
+          }`}
+          onClick={() => setActiveTab("study")}
+          data-testid="flashcards-subtab-study"
+        >
+          Study
+        </button>
+        <button
+          className={`flex-1 py-3 text-sm font-medium transition-colors ${
+            activeTab === "history"
+              ? "text-foreground border-b-2 border-primary"
+              : "text-muted-foreground"
+          }`}
+          onClick={() => setActiveTab("history")}
+          data-testid="flashcards-subtab-history"
+        >
+          History
+        </button>
+      </div>
+
+      {activeTab === "history" ? (
+        <FlashcardHistoryScreen />
+      ) : (
+        <SetupScreen onStart={handleStart} />
+      )}
+    </div>
+  );
 }

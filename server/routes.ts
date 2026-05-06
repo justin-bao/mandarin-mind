@@ -16,6 +16,8 @@ import {
   insertPracticeWordSchema,
   insertPhraseListSchema,
   insertPhraseListItemSchema,
+  insertFlashcardSessionSchema,
+  insertFlashcardSessionCardSchema,
 } from "../shared/schema.js";
 import { z } from "zod";
 
@@ -369,6 +371,75 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete phrase list item" });
+    }
+  });
+
+  // ─── Flashcard Sessions ──────────────────────────────────────────────────
+  app.get("/api/flashcard-sessions", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const sessions = await storage.getFlashcardSessions(req.user!.id);
+      res.json(sessions);
+    } catch (error) {
+      console.error("Error fetching flashcard sessions:", error);
+      res.status(500).json({ error: "Failed to fetch flashcard sessions" });
+    }
+  });
+
+  app.post("/api/flashcard-sessions", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const cardInput = z.array(z.object({
+        chinese: z.string().min(1),
+        pinyin: z.string().optional().nullable(),
+        english: z.string().min(1),
+        sourceListId: z.string().optional().nullable(),
+      })).min(1).parse(req.body.cards);
+
+      const validatedSession = insertFlashcardSessionSchema.parse({ userId: req.user!.id });
+      const cards = cardInput.map((card, index) =>
+        insertFlashcardSessionCardSchema.parse({
+          orderIndex: index,
+          chinese: card.chinese,
+          pinyin: card.pinyin ?? null,
+          english: card.english,
+          sourceListId: card.sourceListId ?? null,
+          status: "pending",
+        })
+      );
+
+      const session = await storage.createFlashcardSession(validatedSession, cards);
+      res.json(session);
+    } catch (error) {
+      console.error("Error creating flashcard session:", error);
+      res.status(400).json({ error: "Failed to create flashcard session" });
+    }
+  });
+
+  app.patch("/api/flashcard-sessions/:sessionId/cards/:cardId", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { status } = z.object({
+        status: z.enum(["known", "unknown", "pending"]),
+      }).parse(req.body);
+
+      const card = await storage.updateFlashcardSessionCardStatus(
+        req.params.sessionId,
+        req.params.cardId,
+        status,
+        req.user!.id
+      );
+      res.json(card);
+    } catch (error) {
+      console.error("Error updating flashcard session card:", error);
+      res.status(400).json({ error: "Failed to update flashcard session card" });
+    }
+  });
+
+  app.patch("/api/flashcard-sessions/:id/complete", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const session = await storage.completeFlashcardSession(req.params.id, req.user!.id);
+      res.json(session);
+    } catch (error) {
+      console.error("Error completing flashcard session:", error);
+      res.status(400).json({ error: "Failed to complete flashcard session" });
     }
   });
 

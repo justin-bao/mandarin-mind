@@ -2,6 +2,7 @@ import { eq, desc, asc, and } from "drizzle-orm";
 import { db } from "./db.js";
 import {
   users, conversations, messages, practiceWords, phraseLists, phraseListItems, mediaItems,
+  flashcardSessions, flashcardSessionCards,
   type User, type InsertUser,
   type Conversation, type InsertConversation,
   type Message, type InsertMessage,
@@ -9,8 +10,14 @@ import {
   type PhraseList, type InsertPhraseList,
   type PhraseListItem, type InsertPhraseListItem,
   type MediaItem, type InsertMediaItem,
+  type FlashcardSession, type InsertFlashcardSession,
+  type FlashcardSessionCard, type InsertFlashcardSessionCard,
   type OcrBlock, type Caption,
 } from "../shared/schema.js";
+
+export type FlashcardSessionWithCards = FlashcardSession & {
+  cards: FlashcardSessionCard[];
+};
 
 export interface IStorage {
   // Users
@@ -53,6 +60,21 @@ export interface IStorage {
   getMediaItemByFileUrl(fileUrl: string, userId: string): Promise<MediaItem | undefined>;
   createMediaItem(item: InsertMediaItem): Promise<MediaItem>;
   deleteMediaItem(id: string, userId: string): Promise<void>;
+
+  // Flashcard Sessions
+  getFlashcardSessions(userId: string): Promise<FlashcardSessionWithCards[]>;
+  getFlashcardSession(id: string, userId: string): Promise<FlashcardSessionWithCards | undefined>;
+  createFlashcardSession(
+    session: InsertFlashcardSession,
+    cards: Omit<InsertFlashcardSessionCard, "sessionId">[]
+  ): Promise<FlashcardSessionWithCards>;
+  updateFlashcardSessionCardStatus(
+    sessionId: string,
+    cardId: string,
+    status: "known" | "unknown" | "pending",
+    userId: string
+  ): Promise<FlashcardSessionCard>;
+  completeFlashcardSession(id: string, userId: string): Promise<FlashcardSession>;
 }
 
 export class DbStorage implements IStorage {
@@ -274,6 +296,99 @@ export class DbStorage implements IStorage {
     await db
       .delete(mediaItems)
       .where(and(eq(mediaItems.id, id), eq(mediaItems.userId, userId)));
+  }
+
+  // ─── Flashcard Sessions ──────────────────────────────────────────────────
+
+  async getFlashcardSessions(userId: string): Promise<FlashcardSessionWithCards[]> {
+    const sessions = await db
+      .select()
+      .from(flashcardSessions)
+      .where(eq(flashcardSessions.userId, userId))
+      .orderBy(desc(flashcardSessions.startedAt));
+
+    return Promise.all(
+      sessions.map(async (session) => ({
+        ...session,
+        cards: await this.getFlashcardSessionCards(session.id),
+      }))
+    );
+  }
+
+  async getFlashcardSession(id: string, userId: string): Promise<FlashcardSessionWithCards | undefined> {
+    const [session] = await db
+      .select()
+      .from(flashcardSessions)
+      .where(and(eq(flashcardSessions.id, id), eq(flashcardSessions.userId, userId)));
+    if (!session) return undefined;
+    return {
+      ...session,
+      cards: await this.getFlashcardSessionCards(session.id),
+    };
+  }
+
+  private async getFlashcardSessionCards(sessionId: string): Promise<FlashcardSessionCard[]> {
+    return db
+      .select()
+      .from(flashcardSessionCards)
+      .where(eq(flashcardSessionCards.sessionId, sessionId))
+      .orderBy(asc(flashcardSessionCards.orderIndex));
+  }
+
+  async createFlashcardSession(
+    insertSession: InsertFlashcardSession,
+    cards: Omit<InsertFlashcardSessionCard, "sessionId">[]
+  ): Promise<FlashcardSessionWithCards> {
+    const [session] = await db.insert(flashcardSessions).values(insertSession).returning();
+    if (cards.length > 0) {
+      await db
+        .insert(flashcardSessionCards)
+        .values(
+          cards.map((card) => ({
+            ...card,
+            sessionId: session.id,
+            status: (card.status ?? "pending") as "known" | "unknown" | "pending",
+          }))
+        );
+    }
+    return {
+      ...session,
+      cards: await this.getFlashcardSessionCards(session.id),
+    };
+  }
+
+  async updateFlashcardSessionCardStatus(
+    sessionId: string,
+    cardId: string,
+    status: "known" | "unknown" | "pending",
+    userId: string
+  ): Promise<FlashcardSessionCard> {
+    const session = await this.getFlashcardSession(sessionId, userId);
+    if (!session) throw new Error(`Flashcard session ${sessionId} not found`);
+
+    const [card] = await db
+      .update(flashcardSessionCards)
+      .set({ status, updatedAt: new Date() })
+      .where(and(eq(flashcardSessionCards.id, cardId), eq(flashcardSessionCards.sessionId, sessionId)))
+      .returning();
+    if (!card) throw new Error(`Flashcard session card ${cardId} not found`);
+
+    await db
+      .update(flashcardSessions)
+      .set({ updatedAt: new Date() })
+      .where(and(eq(flashcardSessions.id, sessionId), eq(flashcardSessions.userId, userId)));
+
+    return card;
+  }
+
+  async completeFlashcardSession(id: string, userId: string): Promise<FlashcardSession> {
+    const [session] = await db
+      .update(flashcardSessions)
+      .set({ completedAt: new Date(), updatedAt: new Date() })
+      .where(and(eq(flashcardSessions.id, id), eq(flashcardSessions.userId, userId)))
+      .returning();
+    if (!session) throw new Error(`Flashcard session ${id} not found`);
+    return session;
   }
 }
 

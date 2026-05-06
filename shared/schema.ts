@@ -80,6 +80,28 @@ export const mediaItems = pgTable("media_items", {
   uploadedAt: timestamp("uploaded_at").defaultNow(),
 });
 
+// Flashcard sessions table
+export const flashcardSessions = pgTable("flashcard_sessions", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  startedAt: timestamp("started_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+  completedAt: timestamp("completed_at"),
+});
+
+// Flashcard session cards table
+export const flashcardSessionCards = pgTable("flashcard_session_cards", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  sessionId: varchar("session_id").notNull().references(() => flashcardSessions.id, { onDelete: "cascade" }),
+  orderIndex: integer("order_index").notNull(),
+  chinese: text("chinese").notNull(),
+  pinyin: text("pinyin"),
+  english: text("english").notNull(),
+  sourceListId: varchar("source_list_id"),
+  status: text("status").notNull().$type<'known' | 'unknown' | 'pending'>().default("pending"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // ─── Insert schemas ────────────────────────────────────────────────────────────
 
 export const insertUserSchema = createInsertSchema(users).omit({
@@ -119,6 +141,19 @@ export const insertMediaItemSchema = createInsertSchema(mediaItems).omit({
   uploadedAt: true,
 });
 
+export const insertFlashcardSessionSchema = createInsertSchema(flashcardSessions).omit({
+  id: true,
+  startedAt: true,
+  updatedAt: true,
+  completedAt: true,
+});
+
+export const insertFlashcardSessionCardSchema = createInsertSchema(flashcardSessionCards).omit({
+  id: true,
+  sessionId: true,
+  updatedAt: true,
+});
+
 // ─── Types ─────────────────────────────────────────────────────────────────────
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
@@ -128,6 +163,8 @@ export type InsertPracticeWord = z.infer<typeof insertPracticeWordSchema>;
 export type InsertPhraseList = z.infer<typeof insertPhraseListSchema>;
 export type InsertPhraseListItem = z.infer<typeof insertPhraseListItemSchema>;
 export type InsertMediaItem = z.infer<typeof insertMediaItemSchema>;
+export type InsertFlashcardSession = z.infer<typeof insertFlashcardSessionSchema>;
+export type InsertFlashcardSessionCard = z.infer<typeof insertFlashcardSessionCardSchema>;
 
 export type User = typeof users.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
@@ -136,6 +173,8 @@ export type PracticeWord = typeof practiceWords.$inferSelect;
 export type PhraseList = typeof phraseLists.$inferSelect;
 export type PhraseListItem = typeof phraseListItems.$inferSelect;
 export type MediaItem = typeof mediaItems.$inferSelect;
+export type FlashcardSession = typeof flashcardSessions.$inferSelect;
+export type FlashcardSessionCard = typeof flashcardSessionCards.$inferSelect;
 
 // ─── Media sub-types ───────────────────────────────────────────────────────────
 

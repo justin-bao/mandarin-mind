@@ -8,14 +8,13 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
-import { MessageCircle, GraduationCap, History, Settings, Layers, Film, Languages } from "lucide-react";
+import { MessageCircle, GraduationCap, Settings, Layers, Film, Languages } from "lucide-react";
 
 const navItems = [
   { id: "conversation", label: "Conversation", icon: MessageCircle },
   { id: "practice", label: "Practice", icon: GraduationCap },
   { id: "flashcards", label: "Flashcards", icon: Layers },
   { id: "media", label: "Media", icon: Film },
-  { id: "history", label: "History", icon: History },
   { id: "settings", label: "Settings", icon: Settings },
 ];
 

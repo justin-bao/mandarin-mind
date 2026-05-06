@@ -18,6 +18,7 @@ declare global {
 const PgSession = connectPgSimple(session);
 
 let passportConfigured = false;
+let localTestUserPromise: Promise<Express.User> | null = null;
 
 function assertRequiredEnv() {
   const requiredEnvVars: Record<string, string> = {
@@ -74,11 +75,57 @@ function configurePassport() {
   passportConfigured = true;
 }
 
+async function getLocalTestUser(): Promise<Express.User> {
+  if (!localTestUserPromise) {
+    localTestUserPromise = (async () => {
+      const email = process.env.LOCAL_AUTO_LOGIN_EMAIL || "local-test@mandarinmind.dev";
+      const existing = await storage.getUserByEmail(email);
+      if (existing) {
+        const { passwordHash: _, ...safeUser } = existing;
+        return safeUser;
+      }
+
+      const passwordHash = await bcrypt.hash(
+        process.env.LOCAL_AUTO_LOGIN_PASSWORD || "local-development-password",
+        12
+      );
+      const user = await storage.createUser({
+        email,
+        passwordHash,
+      });
+      const { passwordHash: _, ...safeUser } = user;
+      return safeUser;
+    })();
+  }
+
+  return localTestUserPromise;
+}
+
+function localAutoLogin(req: Request, res: Response, next: NextFunction) {
+  const enabled =
+    process.env.NODE_ENV === "development" &&
+    process.env.LOCAL_AUTO_LOGIN !== "false";
+
+  if (!enabled || req.isAuthenticated() || req.path === "/api/auth/logout") {
+    return next();
+  }
+
+  getLocalTestUser()
+    .then((user) => {
+      req.login(user, (err) => {
+        if (err) return next(err);
+        next();
+      });
+    })
+    .catch(next);
+}
+
 export async function createApp() {
   assertRequiredEnv();
   configurePassport();
 
   const app = express();
+  const isProduction = process.env.NODE_ENV === "production";
   if (process.env.VERCEL) {
     app.set("trust proxy", 1);
   }
@@ -99,13 +146,14 @@ export async function createApp() {
         maxAge: 30 * 24 * 60 * 60 * 1000,
         httpOnly: true,
         sameSite: "lax",
-        secure: Boolean(process.env.VERCEL),
+        secure: isProduction && Boolean(process.env.VERCEL),
       },
     })
   );
 
   app.use(passport.initialize());
   app.use(passport.session());
+  app.use(localAutoLogin);
 
   app.use((req, res, next) => {
     const start = Date.now();
