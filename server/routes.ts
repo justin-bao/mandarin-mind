@@ -10,6 +10,7 @@ import { storage } from "./storage.js";
 import { mandarinTutorService } from "./openai.js";
 import { lookupPhrase, translateSentence } from "./translation.js";
 import { runOCR, generateCaptions } from "./media.js";
+import { AiUsageBudgetExceededError } from "./usage.js";
 import {
   insertConversationSchema,
   insertMessageSchema,
@@ -33,6 +34,10 @@ if (!fs.existsSync(UPLOADS_DIR)) {
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (req.isAuthenticated()) return next();
   res.status(401).json({ error: "Unauthorized" });
+}
+
+function sendAiUsageError(res: Response) {
+  res.status(402).json({ error: "AI usage budget exceeded" });
 }
 
 // ─── Multer: audio (memory) for conversation audio endpoint ──────────────────
@@ -158,6 +163,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(req.user);
   });
 
+  app.get("/api/usage/ai", requireAuth, async (req: Request, res: Response) => {
+    try {
+      res.json(await storage.getAiUsageSummary(req.user!.id));
+    } catch (error) {
+      console.error("Error fetching AI usage:", error);
+      res.status(500).json({ error: "Failed to fetch AI usage" });
+    }
+  });
+
   // ─── Conversations ────────────────────────────────────────────────────────
   app.get("/api/conversations", requireAuth, async (req: Request, res: Response) => {
     try {
@@ -213,7 +227,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!conversation) return res.status(404).json({ error: "Conversation not found" });
 
       const transcription = await mandarinTutorService.transcribeAudio(req.file.buffer);
-      const userTranslation = await mandarinTutorService.addPinyinAndTranslation(transcription.text);
+      const userTranslation = await mandarinTutorService.addPinyinAndTranslation(
+        transcription.text,
+        req.user!.id,
+        "conversation.annotation"
+      );
 
       const userMessage = await storage.createMessage({
         conversationId,
@@ -239,11 +257,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const aiResponse = await mandarinTutorService.generateResponse(
         transcription.text,
         context,
-        conversationHistory
+        conversationHistory,
+        req.user!.id
       );
 
-      const aiTranslation = await mandarinTutorService.addPinyinAndTranslation(aiResponse.chinese);
-      const audioBuffer = await mandarinTutorService.generateSpeech(aiResponse.chinese);
+      const aiTranslation = await mandarinTutorService.addPinyinAndTranslation(
+        aiResponse.chinese,
+        req.user!.id,
+        "conversation.annotation"
+      );
+      const audioBuffer = await mandarinTutorService.generateSpeech(aiResponse.chinese, req.user!.id);
       const audioBase64 = audioBuffer.toString("base64");
 
       const aiMessage = await storage.createMessage({
@@ -257,6 +280,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       res.json({ userMessage, aiMessage });
     } catch (error) {
+      if (error instanceof AiUsageBudgetExceededError) return sendAiUsageError(res);
       console.error("Error processing audio:", error);
       res.status(500).json({ error: "Failed to process audio" });
     }
@@ -470,9 +494,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { chinese, english } = req.body;
       if (!chinese || !english) return res.status(400).json({ error: "chinese and english are required" });
-      const result = await mandarinTutorService.generateExampleSentence(chinese.trim(), english.trim());
+      const result = await mandarinTutorService.generateExampleSentence(chinese.trim(), english.trim(), req.user!.id);
       res.json(result);
     } catch (error) {
+      if (error instanceof AiUsageBudgetExceededError) return sendAiUsageError(res);
       res.status(500).json({ error: "Failed to generate example sentence" });
     }
   });
@@ -504,10 +529,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { text } = req.body;
       if (!text) return res.status(400).json({ error: "No text provided" });
-      const audioBuffer = await mandarinTutorService.generateSpeech(text);
+      const audioBuffer = await mandarinTutorService.generateSpeech(text, req.user!.id);
       const audioBase64 = audioBuffer.toString("base64");
       res.json({ audioUrl: `data:audio/mp3;base64,${audioBase64}` });
     } catch (error) {
+      if (error instanceof AiUsageBudgetExceededError) return sendAiUsageError(res);
       res.status(500).json({ error: "Failed to generate audio" });
     }
   });
@@ -634,7 +660,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           sendSSE(res, "progress", { step: "transcribing", status: "done" });
           sendSSE(res, "progress", { step: "translating", status: "in-progress" });
         }
-      });
+      }, req.user!.id);
 
       sendSSE(res, "progress", { step: "translating", status: "done" });
 
@@ -652,7 +678,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error("Video/audio upload error:", error);
       if (uploadedPath) { try { fs.unlinkSync(uploadedPath); } catch { /* gone */ } }
-      const message = error instanceof Error ? error.message : "Failed to process media file";
+      const message = error instanceof AiUsageBudgetExceededError
+        ? "AI usage budget exceeded"
+        : error instanceof Error ? error.message : "Failed to process media file";
       sendSSE(res, "error", { message });
     } finally {
       res.end();

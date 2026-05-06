@@ -9,11 +9,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Badge } from "@/components/ui/badge";
 import ThemeToggle from "./ThemeToggle";
 import { useToast } from "@/hooks/use-toast";
+import { useAiUsage } from "@/hooks/use-ai-usage";
 import {
   Volume2,
   Globe,
   Palette,
   Bell,
+  CircleDollarSign,
   Download,
   Trash2,
   Info,
@@ -21,7 +23,13 @@ import {
   User,
 } from "lucide-react";
 
-type AuthUser = { id: string; email: string; createdAt: string | null };
+type AuthUser = {
+  id: string;
+  email: string;
+  aiUsageBudgetUsdMicros?: number;
+  aiUsageSpentUsdMicros?: number;
+  createdAt: string | null;
+};
 
 interface SettingsProps {
   user: AuthUser;
@@ -33,6 +41,13 @@ export default function Settings({ user }: SettingsProps) {
   const [showPinyin, setShowPinyin] = useState(true);
   const [voiceSpeed, setVoiceSpeed] = useState("normal");
   const [notifications, setNotifications] = useState(false);
+
+  const usageQuery = useAiUsage();
+  const usage = usageQuery.data;
+  const usagePercent = usage?.budgetUsdMicros
+    ? Math.min(100, Math.round((usage.spentUsdMicros / usage.budgetUsdMicros) * 100))
+    : 0;
+  const formatUsd = (usdMicros: number) => `$${(usdMicros / 1_000_000).toFixed(4)}`;
 
   const logoutMutation = useMutation({
     mutationFn: () => apiRequest("POST", "/api/auth/logout"),
@@ -78,6 +93,28 @@ export default function Settings({ user }: SettingsProps) {
               <LogOut className="h-4 w-4 mr-2" />
               {logoutMutation.isPending ? "Signing out…" : "Sign Out"}
             </Button>
+          </div>
+        </div>
+      </Card>
+
+      {/* AI Usage */}
+      <Card className="p-4">
+        <div className="flex items-center gap-2 mb-4">
+          <CircleDollarSign className="h-5 w-5" />
+          <Label className="text-base font-medium">AI Usage</Label>
+        </div>
+        <div className="space-y-3">
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <p className="text-sm font-medium">{usage ? `${formatUsd(usage.spentUsdMicros)} used` : "Usage loading"}</p>
+              <p className="text-xs text-muted-foreground">
+                {usage ? `${formatUsd(usage.remainingUsdMicros)} remaining of ${formatUsd(usage.budgetUsdMicros)}` : "Checking usage budget"}
+              </p>
+            </div>
+            <Badge variant={usagePercent >= 100 ? "destructive" : "secondary"}>{usagePercent}%</Badge>
+          </div>
+          <div className="h-2 rounded-full bg-muted overflow-hidden">
+            <div className="h-full bg-primary transition-all" style={{ width: `${usagePercent}%` }} />
           </div>
         </div>
       </Card>

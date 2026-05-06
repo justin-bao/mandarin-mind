@@ -19,7 +19,13 @@ import ThemeToggle from "@/components/ThemeToggle";
 import Flashcards from "@/components/Flashcards";
 import MediaMode from "@/components/MediaMode";
 
-type AuthUser = { id: string; email: string; createdAt: string | null };
+type AuthUser = {
+  id: string;
+  email: string;
+  aiUsageBudgetUsdMicros?: number;
+  aiUsageSpentUsdMicros?: number;
+  createdAt: string | null;
+};
 
 function useCurrentUser() {
   return useQuery<AuthUser | null>({

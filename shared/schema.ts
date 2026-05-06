@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
+import { bigint, pgTable, text, varchar, timestamp, integer, jsonb } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -9,6 +9,24 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   googleId: text("google_id").unique(),
+  aiUsageBudgetUsdMicros: bigint("ai_usage_budget_usd_micros", { mode: "number" }).notNull().default(0),
+  aiUsageSpentUsdMicros: bigint("ai_usage_spent_usd_micros", { mode: "number" }).notNull().default(0),
+  createdAt: timestamp("created_at").defaultNow(),
+});
+
+// AI usage events table
+export const aiUsageEvents = pgTable("ai_usage_events", {
+  id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
+  userId: varchar("user_id").notNull().references(() => users.id, { onDelete: "cascade" }),
+  feature: text("feature").notNull(),
+  provider: text("provider").notNull(),
+  model: text("model").notNull(),
+  inputTokens: integer("input_tokens"),
+  outputTokens: integer("output_tokens"),
+  durationSeconds: integer("duration_seconds"),
+  billableUnits: integer("billable_units"),
+  costUsdMicros: bigint("cost_usd_micros", { mode: "number" }).notNull(),
+  metadata: jsonb("metadata").$type<Record<string, unknown>>(),
   createdAt: timestamp("created_at").defaultNow(),
 });
 
@@ -116,6 +134,11 @@ export const insertConversationSchema = createInsertSchema(conversations).omit({
   updatedAt: true,
 });
 
+export const insertAiUsageEventSchema = createInsertSchema(aiUsageEvents).omit({
+  id: true,
+  createdAt: true,
+});
+
 export const insertMessageSchema = createInsertSchema(messages).omit({
   id: true,
   createdAt: true,
@@ -159,6 +182,7 @@ export const insertFlashcardSessionCardSchema = createInsertSchema(flashcardSess
 
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type InsertConversation = z.infer<typeof insertConversationSchema>;
+export type InsertAiUsageEvent = z.infer<typeof insertAiUsageEventSchema>;
 export type InsertMessage = z.infer<typeof insertMessageSchema>;
 export type InsertPracticeWord = z.infer<typeof insertPracticeWordSchema>;
 export type InsertPhraseList = z.infer<typeof insertPhraseListSchema>;
@@ -168,6 +192,7 @@ export type InsertFlashcardSession = z.infer<typeof insertFlashcardSessionSchema
 export type InsertFlashcardSessionCard = z.infer<typeof insertFlashcardSessionCardSchema>;
 
 export type User = typeof users.$inferSelect;
+export type AiUsageEvent = typeof aiUsageEvents.$inferSelect;
 export type Conversation = typeof conversations.$inferSelect;
 export type Message = typeof messages.$inferSelect;
 export type PracticeWord = typeof practiceWords.$inferSelect;

@@ -43,7 +43,9 @@ import {
 } from "lucide-react";
 import type { PhraseList, PhraseListItem } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
+import { useAiUsage } from "@/hooks/use-ai-usage";
 import SentenceTranslator, { SelectionPopupPanel, useSelectionPopup } from "./SentenceTranslator";
+import AiCreditTooltip from "./AiCreditTooltip";
 
 type ExampleSentence = { sentence: string; pinyin: string; translation: string };
 
@@ -531,12 +533,16 @@ function PhraseCard({
   playingId,
   onPlay,
   onDelete,
+  isOutOfCredits,
+  refreshAiUsage,
 }: {
   item: PhraseListItem;
   listId: string;
   playingId: string | null;
   onPlay: (item: PhraseListItem) => void;
   onDelete: (id: string) => void;
+  isOutOfCredits: boolean;
+  refreshAiUsage: () => void;
 }) {
   const { toast } = useToast();
   const [expanded, setExpanded] = useState(false);
@@ -546,6 +552,7 @@ function PhraseCard({
   const generateMutation = useMutation({
     mutationFn: () => phraseLookupApi.exampleSentence(item.chinese, item.english),
     onSuccess: (newExample) => {
+      refreshAiUsage();
       const updated = [...examples, newExample];
       phraseListsApi.updateItem(listId, item.id, {
         exampleSentences: JSON.stringify(updated),
@@ -570,19 +577,21 @@ function PhraseCard({
               <div className="text-sm text-foreground/80">{item.english}</div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => onPlay(item)}
-                disabled={playingId !== null}
-                title="Play pronunciation"
-              >
-                {playingId === item.id ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Volume2 className="h-4 w-4" />
-                )}
-              </Button>
+              <AiCreditTooltip disabled={isOutOfCredits}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => onPlay(item)}
+                  disabled={playingId !== null || isOutOfCredits}
+                  title="Play pronunciation"
+                >
+                  {playingId === item.id ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Volume2 className="h-4 w-4" />
+                  )}
+                </Button>
+              </AiCreditTooltip>
               <Button variant="ghost" size="icon" onClick={() => onDelete(item.id)} title="Remove phrase">
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -602,21 +611,23 @@ function PhraseCard({
                   ? `${examples.length} example${examples.length !== 1 ? "s" : ""}`
                   : "Example sentences"}
               </button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => generateMutation.mutate()}
-                disabled={generateMutation.isPending}
-                className="h-6 px-2 text-xs"
-                title="Generate an example sentence"
-              >
-                {generateMutation.isPending ? (
-                  <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                ) : (
-                  <Sparkles className="h-3 w-3 mr-1" />
-                )}
-                Generate
-              </Button>
+              <AiCreditTooltip disabled={isOutOfCredits}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => generateMutation.mutate()}
+                  disabled={generateMutation.isPending || isOutOfCredits}
+                  className="h-6 px-2 text-xs"
+                  title="Generate an example sentence"
+                >
+                  {generateMutation.isPending ? (
+                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                  ) : (
+                    <Sparkles className="h-3 w-3 mr-1" />
+                  )}
+                  Generate
+                </Button>
+              </AiCreditTooltip>
             </div>
 
             {expanded && examples.length > 0 && (
@@ -647,6 +658,7 @@ function PhraseCard({
 
 function ListDetail({ list, onBack, onStartPractice }: ListDetailProps) {
   const { toast } = useToast();
+  const { isOutOfCredits, refreshAiUsage } = useAiUsage();
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
@@ -672,6 +684,7 @@ function ListDetail({ list, onBack, onStartPractice }: ListDetailProps) {
     setPlayingId(item.id);
     try {
       const { audioUrl } = await audioApi.generate(item.chinese);
+      refreshAiUsage();
       await playAudio(audioUrl);
     } catch {
       toast({ description: "Failed to play audio", variant: "destructive" });
@@ -748,6 +761,8 @@ function ListDetail({ list, onBack, onStartPractice }: ListDetailProps) {
               playingId={playingId}
               onPlay={handlePlay}
               onDelete={(id) => setDeleteItemId(id)}
+              isOutOfCredits={isOutOfCredits}
+              refreshAiUsage={refreshAiUsage}
             />
           ))}
         </div>

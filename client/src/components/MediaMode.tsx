@@ -29,10 +29,12 @@ import {
   FileAudio,
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { useAiUsage } from "@/hooks/use-ai-usage";
 import type { MediaItem } from "@shared/schema";
 import ImageOCRViewer from "./ImageOCRViewer";
 import MediaCaptionPlayer from "./MediaCaptionPlayer";
 import ProcessingProgressSheet, { type ProcessingStep, type StepStatus } from "./ProcessingProgressSheet";
+import AiCreditTooltip from "./AiCreditTooltip";
 
 // ─── SSE upload helpers ────────────────────────────────────────────────────────
 
@@ -196,6 +198,7 @@ function TypeIcon({ type, className }: { type: MediaItem["type"]; className?: st
 
 export default function MediaMode() {
   const { toast } = useToast();
+  const { isOutOfCredits, refreshAiUsage } = useAiUsage();
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
   const [selectedItem, setSelectedItem] = useState<MediaItem | null>(null);
@@ -262,6 +265,7 @@ export default function MediaMode() {
     const file = e.target.files?.[0];
     if (!file) return;
     e.target.value = "";
+    if (isOutOfCredits) return;
 
     setProgressTitle("Processing Video / Audio");
     setProgressSteps(VIDEO_STEPS.map((s) => ({ ...s })));
@@ -275,6 +279,7 @@ export default function MediaMode() {
       (steps) => setProgressSteps(steps),
       (item) => {
         queryClient.invalidateQueries({ queryKey: ["/api/media"] });
+        refreshAiUsage();
         setTimeout(() => {
           setProgressOpen(false);
           setSelectedItem(item);
@@ -339,16 +344,18 @@ export default function MediaMode() {
           <span className="text-xs text-muted-foreground">JPG, PNG, WEBP, GIF</span>
         </button>
 
-        <button
-          type="button"
-          disabled={progressOpen}
-          onClick={() => videoInputRef.current?.click()}
-          className="flex flex-col items-center gap-2 p-5 rounded-lg border-2 border-dashed border-border hover-elevate bg-card text-center disabled:opacity-60"
-        >
-          <Upload className="h-7 w-7 text-primary" />
-          <span className="text-sm font-medium">Upload Video / Audio</span>
-          <span className="text-xs text-muted-foreground">MP4, MP3, WAV, MOV…</span>
-        </button>
+        <AiCreditTooltip disabled={isOutOfCredits} className="w-full">
+          <button
+            type="button"
+            disabled={progressOpen || isOutOfCredits}
+            onClick={() => videoInputRef.current?.click()}
+            className="flex w-full flex-col items-center gap-2 p-5 rounded-lg border-2 border-dashed border-border hover-elevate bg-card text-center disabled:opacity-60"
+          >
+            <Upload className="h-7 w-7 text-primary" />
+            <span className="text-sm font-medium">Upload Video / Audio</span>
+            <span className="text-xs text-muted-foreground">MP4, MP3, WAV, MOV…</span>
+          </button>
+        </AiCreditTooltip>
       </div>
 
       {/* Hidden file inputs */}

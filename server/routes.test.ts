@@ -10,6 +10,9 @@ const storageMock = vi.hoisted(() => ({
   getUserByGoogleId: vi.fn(),
   createUser: vi.fn(),
   linkUserToGoogle: vi.fn(),
+  getAiUsageSummary: vi.fn(),
+  assertAiUsageWithinBudget: vi.fn(),
+  recordAiUsage: vi.fn(),
   getConversations: vi.fn(),
   createConversation: vi.fn(),
   getConversation: vi.fn(),
@@ -122,7 +125,14 @@ beforeEach(() => {
     id: "user-1",
     email: "user@example.com",
     passwordHash: "hashed-password",
+    aiUsageBudgetUsdMicros: 0,
+    aiUsageSpentUsdMicros: 0,
     createdAt: null,
+  });
+  storageMock.getAiUsageSummary.mockResolvedValue({
+    budgetUsdMicros: 0,
+    spentUsdMicros: 0,
+    remainingUsdMicros: 0,
   });
   storageMock.getConversations.mockResolvedValue([]);
   storageMock.createConversation.mockResolvedValue({
@@ -203,7 +213,13 @@ describe("API route integration", () => {
       email: "user@example.com",
       passwordHash: expect.any(String),
     });
-    expect(res.body).toEqual({ id: "user-1", email: "user@example.com", createdAt: null });
+    expect(res.body).toEqual({
+      id: "user-1",
+      email: "user@example.com",
+      aiUsageBudgetUsdMicros: 0,
+      aiUsageSpentUsdMicros: 0,
+      createdAt: null,
+    });
   });
 
   it("logs in valid credentials and rejects invalid credentials", async () => {
@@ -284,12 +300,14 @@ describe("API route integration", () => {
     const example = await request(app).post("/api/phrases/example-sentence").send({ chinese: "茶", english: "tea" });
     const audio = await request(app).post("/api/audio/generate").send({ text: "你好" });
     const media = await request(app).get("/api/media");
+    const usage = await request(app).get("/api/usage/ai");
 
     expect(lookup.body.english).toBe("hello");
     expect(sentence.body.translation).toBe("hello");
     expect(example.body.sentence).toBe("我喜欢喝茶。");
     expect(audio.body.audioUrl).toMatch(/^data:audio\/mp3;base64,/);
     expect(media.body).toEqual([]);
+    expect(usage.body.remainingUsdMicros).toBe(0);
   });
 
   it("streams image upload progress and persists the OCR media item", async () => {

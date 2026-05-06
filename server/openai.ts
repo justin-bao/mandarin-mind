@@ -1,4 +1,10 @@
 import OpenAI from 'openai';
+import { storage } from './storage.js';
+import {
+  calculateOpenAIChatCostUsdMicros,
+  calculateOpenAITtsCostUsdMicros,
+  type AiFeature,
+} from './usage.js';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -41,8 +47,10 @@ export class MandarinTutorService {
   async generateResponse(
     userMessage: string,
     context: ConversationContext,
-    conversationHistory: ConversationMessage[] = []
+    conversationHistory: ConversationMessage[] = [],
+    userId?: string
   ): Promise<{ chinese: string; pinyin: string; english: string }> {
+    if (userId) await storage.assertAiUsageWithinBudget(userId);
     try {
       const systemPrompt = this.buildSystemPrompt(context);
       
@@ -52,11 +60,19 @@ export class MandarinTutorService {
         { role: 'user', content: userMessage }
       ];
 
+      const model = 'gpt-4';
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4',
+        model,
         messages: messages,
         temperature: 0.7,
         max_tokens: 200,
+      });
+
+      await this.recordChatUsage(userId, {
+        feature: 'conversation.response',
+        model,
+        inputTokens: completion.usage?.prompt_tokens ?? 0,
+        outputTokens: completion.usage?.completion_tokens ?? 0,
       });
 
       const response = completion.choices[0]?.message?.content || '';
@@ -69,14 +85,26 @@ export class MandarinTutorService {
     }
   }
 
-  async generateSpeech(text: string): Promise<Buffer> {
+  async generateSpeech(text: string, userId?: string): Promise<Buffer> {
+    if (userId) await storage.assertAiUsageWithinBudget(userId);
     try {
+      const model = 'tts-1';
       const mp3 = await openai.audio.speech.create({
-        model: 'tts-1',
+        model,
         voice: 'nova',
         input: text,
         speed: 1.0,
       });
+
+      if (userId) {
+        await storage.recordAiUsage(userId, {
+          feature: 'conversation.speech',
+          provider: 'openai',
+          model,
+          billableUnits: text.length,
+          costUsdMicros: calculateOpenAITtsCostUsdMicros(text.length),
+        });
+      }
 
       const buffer = Buffer.from(await mp3.arrayBuffer());
       return buffer;
@@ -86,10 +114,16 @@ export class MandarinTutorService {
     }
   }
 
-  async addPinyinAndTranslation(chineseText: string): Promise<{ pinyin: string; english: string }> {
+  async addPinyinAndTranslation(
+    chineseText: string,
+    userId?: string,
+    feature: AiFeature = 'conversation.annotation'
+  ): Promise<{ pinyin: string; english: string }> {
+    if (userId) await storage.assertAiUsageWithinBudget(userId);
     try {
+      const model = 'gpt-4';
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4',
+        model,
         messages: [
           {
             role: 'system',
@@ -108,6 +142,13 @@ ENGLISH: [translation here]`
         ],
         temperature: 0.1,
         max_tokens: 150,
+      });
+
+      await this.recordChatUsage(userId, {
+        feature,
+        model,
+        inputTokens: completion.usage?.prompt_tokens ?? 0,
+        outputTokens: completion.usage?.completion_tokens ?? 0,
       });
 
       const response = completion.choices[0]?.message?.content || '';
@@ -130,11 +171,14 @@ ENGLISH: [translation here]`
 
   async generateExampleSentence(
     chinese: string,
-    english: string
+    english: string,
+    userId?: string
   ): Promise<{ sentence: string; pinyin: string; translation: string }> {
+    if (userId) await storage.assertAiUsageWithinBudget(userId);
     try {
+      const model = 'gpt-4o-mini';
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4o-mini',
+        model,
         messages: [
           {
             role: 'user',
@@ -149,6 +193,14 @@ ENGLISH: [natural English translation]`,
         temperature: 0.8,
         max_tokens: 200,
       });
+
+      await this.recordChatUsage(userId, {
+        feature: 'phrase.example_sentence',
+        model,
+        inputTokens: completion.usage?.prompt_tokens ?? 0,
+        outputTokens: completion.usage?.completion_tokens ?? 0,
+      });
+
       const text = completion.choices[0]?.message?.content ?? '';
       const sentence = text.match(/SENTENCE:\s*(.+)/)?.[1]?.trim() ?? '';
       const pinyin   = text.match(/PINYIN:\s*(.+)/)?.[1]?.trim()   ?? '';
@@ -195,6 +247,26 @@ Try to naturally include these words/phrases in the conversation.`;
       pinyin: '', // Will be filled by addPinyinAndTranslation
       english: ''  // Will be filled by addPinyinAndTranslation
     };
+  }
+
+  private async recordChatUsage(
+    userId: string | undefined,
+    usage: { feature: AiFeature; model: string; inputTokens: number; outputTokens: number }
+  ) {
+    if (!userId) return;
+    const costUsdMicros = calculateOpenAIChatCostUsdMicros(
+      usage.model,
+      usage.inputTokens,
+      usage.outputTokens
+    );
+    await storage.recordAiUsage(userId, {
+      feature: usage.feature,
+      provider: 'openai',
+      model: usage.model,
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      costUsdMicros,
+    });
   }
 }
 

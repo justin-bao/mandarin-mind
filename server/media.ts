@@ -3,6 +3,8 @@ import path from "path";
 import Groq from "groq-sdk";
 import OpenAI from "openai";
 import type { OcrBlock, Caption } from "../shared/schema.js";
+import { storage } from "./storage.js";
+import { calculateGroqWhisperCostUsdMicros, calculateOpenAIChatCostUsdMicros } from "./usage.js";
 
 const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -119,11 +121,12 @@ export async function runOCR(
 
 export async function generateCaptions(
   filePath: string,
-  onProgress?: (step: "transcribing" | "translating") => void
+  onProgress?: (step: "transcribing" | "translating") => void,
+  userId?: string
 ): Promise<Caption[]> {
-  const fileStream = fs.createReadStream(filePath);
-
   onProgress?.("transcribing");
+  if (userId) await storage.assertAiUsageWithinBudget(userId);
+  const fileStream = fs.createReadStream(filePath);
 
   // groq-sdk types the response as SpeechCreateParams but verbose_json returns
   // a richer object at runtime — cast through unknown to our typed interface.
@@ -144,6 +147,17 @@ export async function generateCaptions(
     throw new Error("Groq API did not return expected verbose_json with segments");
   }
   const segments: GroqSegment[] = transcription.segments;
+  if (userId) {
+    await storage.recordAiUsage(userId, {
+      feature: "media.transcription",
+      provider: "groq",
+      model: "whisper-large-v3-turbo",
+      durationSeconds: transcription.duration,
+      billableUnits: Math.ceil(transcription.duration),
+      costUsdMicros: calculateGroqWhisperCostUsdMicros(transcription.duration),
+      metadata: { segmentCount: segments.length },
+    });
+  }
 
   if (!segments.length) return [];
 
@@ -165,6 +179,8 @@ export async function generateCaptions(
   const translationMap = new Map<number, string>();
 
   for (let chunkStart = 0; chunkStart < segments.length; chunkStart += CHUNK_SIZE) {
+    if (userId) await storage.assertAiUsageWithinBudget(userId);
+
     const chunk = segments.slice(chunkStart, chunkStart + CHUNK_SIZE);
     const segmentList = chunk.map((s, i) => ({ index: chunkStart + i, text: s.text.trim() }));
 
@@ -176,13 +192,28 @@ Segments:\n${JSON.stringify(segmentList)}`
 Return a JSON object with key "translations" whose value is an array of objects: { "index": number, "translated": string }.
 Segments:\n${JSON.stringify(segmentList)}`;
 
+    const model = "gpt-4o-mini";
     const completion = await openai.chat.completions.create({
-      model: "gpt-4o-mini",
+      model,
       messages: [{ role: "user", content: translationPrompt }],
       response_format: { type: "json_object" },
       temperature: 0.1,
       max_tokens: 2000,
     });
+
+    if (userId) {
+      const inputTokens = completion.usage?.prompt_tokens ?? 0;
+      const outputTokens = completion.usage?.completion_tokens ?? 0;
+      await storage.recordAiUsage(userId, {
+        feature: "media.translation",
+        provider: "openai",
+        model,
+        inputTokens,
+        outputTokens,
+        costUsdMicros: calculateOpenAIChatCostUsdMicros(model, inputTokens, outputTokens),
+        metadata: { chunkStart, chunkSize: chunk.length },
+      });
+    }
 
     try {
       const parsed = JSON.parse(

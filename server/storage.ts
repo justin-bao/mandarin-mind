@@ -1,9 +1,11 @@
-import { eq, desc, asc, and } from "drizzle-orm";
+import { eq, desc, asc, and, sql } from "drizzle-orm";
 import { db } from "./db.js";
+import { AiUsageBudgetExceededError, type AiUsageCharge } from "./usage.js";
 import {
-  users, conversations, messages, practiceWords, phraseLists, phraseListItems, mediaItems,
+  users, aiUsageEvents, conversations, messages, practiceWords, phraseLists, phraseListItems, mediaItems,
   flashcardSessions, flashcardSessionCards,
   type User, type InsertUser,
+  type AiUsageEvent,
   type Conversation, type InsertConversation,
   type Message, type InsertMessage,
   type PracticeWord, type InsertPracticeWord,
@@ -26,6 +28,9 @@ export interface IStorage {
   getUserByGoogleId(googleId: string): Promise<User | undefined>;
   createUser(user: InsertUser): Promise<User>;
   linkUserToGoogle(id: string, googleId: string): Promise<User>;
+  getAiUsageSummary(userId: string): Promise<AiUsageSummary>;
+  assertAiUsageWithinBudget(userId: string): Promise<void>;
+  recordAiUsage(userId: string, charge: AiUsageCharge): Promise<AiUsageEvent>;
 
   // Conversations
   getConversation(id: string, userId: string): Promise<Conversation | undefined>;
@@ -79,6 +84,12 @@ export interface IStorage {
   completeFlashcardSession(id: string, userId: string): Promise<FlashcardSession>;
 }
 
+export interface AiUsageSummary {
+  budgetUsdMicros: number;
+  spentUsdMicros: number;
+  remainingUsdMicros: number;
+}
+
 export class DbStorage implements IStorage {
   // ─── Users ────────────────────────────────────────────────────────────────
 
@@ -110,6 +121,51 @@ export class DbStorage implements IStorage {
       .returning();
     if (!user) throw new Error(`User ${id} not found`);
     return user;
+  }
+
+  async getAiUsageSummary(userId: string): Promise<AiUsageSummary> {
+    const user = await this.getUserById(userId);
+    if (!user) throw new Error(`User ${userId} not found`);
+    const budgetUsdMicros = user.aiUsageBudgetUsdMicros ?? 0;
+    const spentUsdMicros = user.aiUsageSpentUsdMicros ?? 0;
+    return {
+      budgetUsdMicros,
+      spentUsdMicros,
+      remainingUsdMicros: Math.max(0, budgetUsdMicros - spentUsdMicros),
+    };
+  }
+
+  async assertAiUsageWithinBudget(userId: string): Promise<void> {
+    const summary = await this.getAiUsageSummary(userId);
+    if (summary.spentUsdMicros >= summary.budgetUsdMicros) {
+      throw new AiUsageBudgetExceededError();
+    }
+  }
+
+  async recordAiUsage(userId: string, charge: AiUsageCharge): Promise<AiUsageEvent> {
+    const costUsdMicros = Math.max(0, Math.ceil(charge.costUsdMicros));
+    const [event] = await db
+      .insert(aiUsageEvents)
+      .values({
+        userId,
+        feature: charge.feature,
+        provider: charge.provider,
+        model: charge.model,
+        inputTokens: charge.inputTokens ?? null,
+        outputTokens: charge.outputTokens ?? null,
+        durationSeconds: charge.durationSeconds != null ? Math.ceil(charge.durationSeconds) : null,
+        billableUnits: charge.billableUnits ?? null,
+        costUsdMicros,
+        metadata: charge.metadata ?? null,
+      })
+      .returning();
+
+    await db
+      .update(users)
+      .set({ aiUsageSpentUsdMicros: sql`${users.aiUsageSpentUsdMicros} + ${costUsdMicros}` })
+      .where(eq(users.id, userId));
+
+    return event;
   }
 
   // ─── Conversations ────────────────────────────────────────────────────────

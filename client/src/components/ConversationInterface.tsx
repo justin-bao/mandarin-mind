@@ -5,8 +5,10 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import ConversationBubble from "./ConversationBubble";
 import VoiceRecorder from "./VoiceRecorder";
+import AiCreditTooltip from "./AiCreditTooltip";
 import { Loader2, ArrowLeft, Settings2 } from "lucide-react";
 import { conversationApi } from "@/lib/api";
+import { useAiUsage } from "@/hooks/use-ai-usage";
 
 interface Message {
   id: string;
@@ -36,6 +38,7 @@ export default function ConversationInterface({
   const [showVoiceRecorder, setShowVoiceRecorder] = useState(false);
   const scrollAreaRef = useRef<HTMLDivElement>(null);
   const queryClient = useQueryClient();
+  const { isOutOfCredits, refreshAiUsage } = useAiUsage();
 
   // Create conversation when component mounts
   const createConversationMutation = useMutation({
@@ -61,6 +64,7 @@ export default function ConversationInterface({
     mutationFn: (audioBlob: Blob) => conversationApi.sendAudio(conversationId!, audioBlob),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['messages', conversationId] });
+      refreshAiUsage();
       setShowVoiceRecorder(false);
     },
   });
@@ -185,15 +189,17 @@ export default function ConversationInterface({
             </Button>
           </div>
         ) : (
-          <Button
-            size="lg"
-            onClick={() => setShowVoiceRecorder(true)}
-            disabled={sendAudioMutation.isPending || !conversationId}
-            className="w-full"
-            data-testid="button-start-recording"
-          >
-            Start Speaking
-          </Button>
+          <AiCreditTooltip disabled={isOutOfCredits} className="w-full">
+            <Button
+              size="lg"
+              onClick={() => setShowVoiceRecorder(true)}
+              disabled={sendAudioMutation.isPending || !conversationId || isOutOfCredits}
+              className="w-full"
+              data-testid="button-start-recording"
+            >
+              Start Speaking
+            </Button>
+          </AiCreditTooltip>
         )}
       </Card>
     </div>
