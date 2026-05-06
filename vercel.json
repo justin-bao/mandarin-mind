@@ -1,9 +1,11 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "devCommand": "npm run dev",
   "buildCommand": "npm run vercel-build",
   "outputDirectory": "dist/public",
   "functions": {
     "api/index.ts": {
+      "includeFiles": "{server,shared}/**",
       "maxDuration": 60
     }
   },

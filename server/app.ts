@@ -4,14 +4,14 @@ import passport from "passport";
 import { Strategy as LocalStrategy } from "passport-local";
 import connectPgSimple from "connect-pg-simple";
 import bcrypt from "bcryptjs";
-import { registerRoutes } from "./routes";
-import { log } from "./log";
-import { storage } from "./storage";
-import { pool } from "./db";
+import { registerRoutes } from "./routes.js";
+import { log } from "./log.js";
+import { storage } from "./storage.js";
+import { pool } from "./db.js";
 
 declare global {
   namespace Express {
-    interface User extends Omit<import("../shared/schema").User, "passwordHash"> {}
+    interface User extends Omit<import("../shared/schema.js").User, "passwordHash"> {}
   }
 }
 

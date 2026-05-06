@@ -6,17 +6,17 @@ import fs from "fs";
 import { randomUUID } from "crypto";
 import bcrypt from "bcryptjs";
 import passport from "passport";
-import { storage } from "./storage";
-import { mandarinTutorService } from "./openai";
-import { lookupPhrase, translateSentence } from "./translation";
-import { runOCR, generateCaptions } from "./media";
+import { storage } from "./storage.js";
+import { mandarinTutorService } from "./openai.js";
+import { lookupPhrase, translateSentence } from "./translation.js";
+import { runOCR, generateCaptions } from "./media.js";
 import {
   insertConversationSchema,
   insertMessageSchema,
   insertPracticeWordSchema,
   insertPhraseListSchema,
   insertPhraseListItemSchema,
-} from "../shared/schema";
+} from "../shared/schema.js";
 import { z } from "zod";
 
 // ─── Uploads directory ────────────────────────────────────────────────────────

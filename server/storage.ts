@@ -1,5 +1,5 @@
 import { eq, desc, asc, and } from "drizzle-orm";
-import { db } from "./db";
+import { db } from "./db.js";
 import {
   users, conversations, messages, practiceWords, phraseLists, phraseListItems, mediaItems,
   type User, type InsertUser,
@@ -10,7 +10,7 @@ import {
   type PhraseListItem, type InsertPhraseListItem,
   type MediaItem, type InsertMediaItem,
   type OcrBlock, type Caption,
-} from "../shared/schema";
+} from "../shared/schema.js";
 
 export interface IStorage {
   // Users

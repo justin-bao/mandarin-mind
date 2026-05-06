@@ -1,8 +1,11 @@
-import { createApp } from "./app";
-import { log } from "./log";
-import { setupVite, serveStatic } from "./vite";
+import "./env.js";
+import { log } from "./log.js";
 
 (async () => {
+  const [{ createApp }, { setupVite, serveStatic }] = await Promise.all([
+    import("./app.js"),
+    import("./vite.js"),
+  ]);
   const { app, server } = await createApp();
 
   if (app.get("env") === "development") {
@@ -12,7 +15,7 @@ import { setupVite, serveStatic } from "./vite";
   }
 
   const port = parseInt(process.env.PORT || "5000", 10);
-  server.listen({ port, host: "0.0.0.0", reusePort: true }, () => {
+  server.listen({ port, host: "0.0.0.0" }, () => {
     log(`serving on port ${port}`);
   });
 })().catch((error) => {
