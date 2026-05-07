@@ -505,9 +505,15 @@ function useExampleSelectionHandler(
 
 function ExampleItem({
   ex,
+  isPlaying,
+  disabled,
+  onPlay,
   onSelectionChange,
 }: {
   ex: ExampleSentence;
+  isPlaying: boolean;
+  disabled: boolean;
+  onPlay: () => void;
   onSelectionChange: (chinese: string, rect: DOMRect | null) => void;
 }) {
   const handleMouseUp = useExampleSelectionHandler(onSelectionChange);
@@ -518,10 +524,34 @@ function ExampleItem({
       onMouseUp={handleMouseUp}
       onTouchEnd={handleMouseUp}
     >
-      <div className="font-chinese text-base leading-snug">{ex.sentence}</div>
-      {ex.pinyin && (
-        <div className="text-xs text-primary italic">{ex.pinyin}</div>
-      )}
+      <div className="flex items-start gap-2">
+        <div className="min-w-0 flex-1">
+          <div className="font-chinese text-base leading-snug">{ex.sentence}</div>
+          {ex.pinyin && (
+            <div className="text-xs text-primary italic">{ex.pinyin}</div>
+          )}
+        </div>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="h-7 w-7 shrink-0"
+          disabled={disabled}
+          onMouseUp={(event) => event.stopPropagation()}
+          onTouchEnd={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onPlay();
+          }}
+          title="Play example sentence"
+        >
+          {isPlaying ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Volume2 className="h-3.5 w-3.5" />
+          )}
+        </Button>
+      </div>
       <div className="text-xs text-foreground/70">{ex.translation}</div>
     </div>
   );
@@ -539,7 +569,7 @@ function PhraseCard({
   item: PhraseListItem;
   listId: string;
   playingId: string | null;
-  onPlay: (item: PhraseListItem) => void;
+  onPlay: (id: string, text: string) => void;
   onDelete: (id: string) => void;
   isOutOfCredits: boolean;
   refreshAiUsage: () => void;
@@ -581,7 +611,7 @@ function PhraseCard({
                 <Button
                   variant="ghost"
                   size="icon"
-                  onClick={() => onPlay(item)}
+                  onClick={() => onPlay(item.id, item.chinese)}
                   disabled={playingId !== null || isOutOfCredits}
                   title="Play pronunciation"
                 >
@@ -636,7 +666,14 @@ function PhraseCard({
                   Select any Chinese sub-phrase to look it up
                 </p>
                 {examples.map((ex, i) => (
-                  <ExampleItem key={i} ex={ex} onSelectionChange={handleSelectionChange} />
+                  <ExampleItem
+                    key={i}
+                    ex={ex}
+                    isPlaying={playingId === `${item.id}:example:${i}`}
+                    disabled={(playingId !== null && playingId !== `${item.id}:example:${i}`) || isOutOfCredits}
+                    onPlay={() => onPlay(`${item.id}:example:${i}`, ex.sentence)}
+                    onSelectionChange={handleSelectionChange}
+                  />
                 ))}
               </div>
             )}
@@ -679,13 +716,13 @@ function ListDetail({ list, onBack, onStartPractice }: ListDetailProps) {
     onError: () => toast({ description: "Failed to remove phrase", variant: "destructive" }),
   });
 
-  const handlePlay = async (item: PhraseListItem) => {
+  const handlePlay = async (id: string, text: string) => {
     if (playingId) return;
-    setPlayingId(item.id);
+    setPlayingId(id);
     try {
-      const { audioUrl } = await audioApi.generate(item.chinese);
-      refreshAiUsage();
-      await playAudio(audioUrl);
+      const { audioUrl, cached } = await audioApi.generateCached(text);
+      if (!cached) refreshAiUsage();
+      await playAudio(audioUrl, 1.15);
     } catch {
       toast({ description: "Failed to play audio", variant: "destructive" });
     } finally {

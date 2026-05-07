@@ -7,12 +7,13 @@ import {
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
+  useSidebar,
 } from "@/components/ui/sidebar";
 import { MessageCircle, GraduationCap, Settings, Layers, Film, Languages } from "lucide-react";
 
 const navItems = [
   { id: "conversation", label: "Conversation", icon: MessageCircle },
-  { id: "practice", label: "Practice", icon: GraduationCap },
+  { id: "practice", label: "My Phrases", icon: GraduationCap },
   { id: "flashcards", label: "Flashcards", icon: Layers },
   { id: "media", label: "Media", icon: Film },
   { id: "settings", label: "Settings", icon: Settings },
@@ -24,8 +25,17 @@ interface AppSidebarProps {
 }
 
 export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
+  const { isMobile, setOpenMobile } = useSidebar();
+
+  const handleNavChange = (tabId: string) => {
+    onTabChange(tabId);
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
+
   return (
-    <Sidebar collapsible="none" className="hidden md:flex border-r">
+    <Sidebar collapsible="offcanvas" className="border-r">
       <SidebarHeader className="px-4 py-3 border-b">
         <div className="flex items-center gap-2">
           <div className="p-1.5 rounded-md bg-primary/10">
@@ -42,7 +52,7 @@ export function AppSidebar({ activeTab, onTabChange }: AppSidebarProps) {
                 <SidebarMenuItem key={item.id}>
                   <SidebarMenuButton
                     isActive={activeTab === item.id}
-                    onClick={() => onTabChange(item.id)}
+                    onClick={() => handleNavChange(item.id)}
                     data-testid={`sidebar-tab-${item.id}`}
                   >
                     <item.icon className="h-4 w-4" />

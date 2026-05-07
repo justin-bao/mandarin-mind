@@ -2,7 +2,7 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes.js";
 import { log } from "./log.js";
 import { storage } from "./storage.js";
-import { supabaseServer } from "./supabase.js";
+import { getSupabaseServer } from "./supabase.js";
 import type { User as AppUser } from "../shared/schema.js";
 import { posthog } from "./posthog.js";
 
@@ -15,23 +15,18 @@ declare global {
   }
 }
 
-function assertRequiredEnv() {
-  const requiredEnvVars: Record<string, string> = {
+function warnMissingEnv() {
+  const expectedEnvVars: Record<string, string> = {
     OPENAI_API_KEY: "OpenAI API key - required for speech transcription, conversation AI, and TTS",
     GROQ_API_KEY: "Groq API key - required for video/audio caption generation",
     DATABASE_URL: "PostgreSQL connection string - required for data persistence",
     SUPABASE_URL: "Supabase project URL - required for Supabase Auth",
     SUPABASE_ANON_KEY: "Supabase anon key - required for Supabase Auth token verification",
   };
-  const missingVars: string[] = [];
-  for (const [key, description] of Object.entries(requiredEnvVars)) {
+  for (const [key, description] of Object.entries(expectedEnvVars)) {
     if (!process.env[key]) {
       console.error(`[startup] Missing required environment variable: ${key}\n  ${description}`);
-      missingVars.push(key);
     }
-  }
-  if (missingVars.length > 0) {
-    throw new Error(`Missing required environment variables: ${missingVars.join(", ")}`);
   }
 }
 
@@ -46,7 +41,7 @@ async function attachSupabaseUser(req: Request, _res: Response, next: NextFuncti
     const token = getBearerToken(req);
     if (!token) return next();
 
-    const { data, error } = await supabaseServer.auth.getUser(token);
+    const { data, error } = await getSupabaseServer().auth.getUser(token);
     if (error || !data.user?.email) return next();
 
     req.user = await storage.upsertUserProfile({
@@ -64,7 +59,7 @@ async function attachSupabaseUser(req: Request, _res: Response, next: NextFuncti
 }
 
 export async function createApp() {
-  assertRequiredEnv();
+  warnMissingEnv();
 
   const app = express();
   if (process.env.VERCEL) {

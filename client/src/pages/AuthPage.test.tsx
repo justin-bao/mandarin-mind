@@ -17,14 +17,30 @@ vi.mock("@/lib/supabase", () => ({
 }));
 
 function renderAuthPage() {
+  window.history.pushState({}, "", "/auth");
   render(createElement(QueryClientProvider, { client: queryClient }, createElement(AuthPage)));
   return queryClient;
+}
+
+function renderLandingPage() {
+  window.history.pushState({}, "", "/");
+  render(createElement(QueryClientProvider, { client: queryClient }, createElement(AuthPage)));
 }
 
 describe("AuthPage", () => {
   beforeEach(() => {
     queryClient.clear();
+    window.history.pushState({}, "", "/");
     Object.values(supabaseAuthMock).forEach((mock) => mock.mockReset());
+  });
+
+  it("keeps sign-in controls off the landing page", () => {
+    renderLandingPage();
+
+    expect(screen.getByRole("heading", { name: "MandarinMind" })).toBeInTheDocument();
+    expect(screen.queryByTestId("input-login-email")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("link", { name: "Start practicing" })[0]).toHaveAttribute("href", "/auth");
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/auth");
   });
 
   it("logs in with Supabase Auth and refreshes the current-user query", async () => {

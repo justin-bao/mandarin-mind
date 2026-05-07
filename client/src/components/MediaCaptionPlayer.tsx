@@ -232,7 +232,7 @@ export default function MediaCaptionPlayer({ mediaItem }: Props) {
                     ))}
                     {phraseLists.length === 0 && (
                       <SelectItem value="__none__" disabled>
-                        No lists yet — create one in Practice
+                        No lists yet — create one in My Phrases
                       </SelectItem>
                     )}
                   </SelectContent>

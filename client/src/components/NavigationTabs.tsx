@@ -29,7 +29,7 @@ const tabs: NavigationTab[] = [
   },
   {
     id: 'practice',
-    label: 'Practice',
+    label: 'My Phrases',
     icon: <GraduationCap className="h-5 w-5" />
   },
   {

@@ -4,17 +4,18 @@ import { queryClient, getQueryFn } from "./lib/queryClient";
 import { QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { SidebarProvider } from "@/components/ui/sidebar";
+import { SidebarProvider, useSidebar } from "@/components/ui/sidebar";
+import { Button } from "@/components/ui/button";
 import NotFound from "@/pages/not-found";
 import AuthPage from "@/pages/AuthPage";
 import { AppSidebar } from "@/components/AppSidebar";
 import { supabase } from "@/lib/supabase";
+import { Languages, Menu } from "lucide-react";
 
 import TopicSelector from "@/components/TopicSelector";
 import PhraseListsManager from "@/components/PhraseListsManager";
 import ConversationInterface from "@/components/ConversationInterface";
 import ConversationHistory from "@/components/ConversationHistory";
-import NavigationTabs from "@/components/NavigationTabs";
 import Settings from "@/components/Settings";
 import ThemeToggle from "@/components/ThemeToggle";
 import Flashcards from "@/components/Flashcards";
@@ -40,6 +41,32 @@ const sidebarStyle = {
   "--sidebar-width": "13rem",
   "--sidebar-width-icon": "3.5rem",
 };
+
+export function MobileAppHeader() {
+  const { setOpenMobile } = useSidebar();
+
+  return (
+    <header className="flex h-14 shrink-0 items-center border-b border-border bg-card px-3 md:hidden">
+      <div className="flex min-w-0 items-center gap-2">
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          onClick={() => setOpenMobile(true)}
+          aria-label="Open navigation menu"
+          data-testid="button-mobile-menu"
+          className="shrink-0"
+        >
+          <Menu className="h-5 w-5" aria-hidden="true" />
+        </Button>
+        <div className="flex h-8 w-8 items-center justify-center rounded-md bg-primary/10">
+          <Languages className="h-4 w-4 text-primary" aria-hidden="true" />
+        </div>
+        <span className="truncate font-semibold">MandarinMind</span>
+      </div>
+    </header>
+  );
+}
 
 function MainApp({ user }: { user: AuthUser }) {
   const [activeTab, setActiveTab] = useState("conversation");
@@ -226,14 +253,10 @@ function MainApp({ user }: { user: AuthUser }) {
       <div className="flex h-screen w-full">
         <AppSidebar activeTab={activeTab} onTabChange={handleTabChange} />
         <div className="flex flex-col flex-1 overflow-hidden min-w-0">
-          <main className="flex-1 overflow-auto pb-16 md:pb-0">
+          <MobileAppHeader />
+          <main className="flex-1 overflow-auto">
             {renderContent()}
           </main>
-          <NavigationTabs
-            activeTab={activeTab}
-            onTabChange={handleTabChange}
-            className="fixed bottom-0 left-0 right-0 z-50 md:hidden"
-          />
         </div>
       </div>
     </SidebarProvider>

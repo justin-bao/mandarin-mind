@@ -93,7 +93,22 @@ export const audioApi = {
   generate: async (text: string) => {
     const res = await apiRequest('POST', '/api/audio/generate', { text });
     return await res.json();
-  }
+  },
+  generateCached: async (text: string): Promise<{ audioUrl: string; cached: boolean }> => {
+    const cacheKey = text.trim();
+    const cached = audioUrlCache.get(cacheKey);
+    if (cached) return { audioUrl: await cached, cached: true };
+
+    const request = audioApi.generate(cacheKey).then(({ audioUrl }) => audioUrl);
+    audioUrlCache.set(cacheKey, request);
+
+    try {
+      return { audioUrl: await request, cached: false };
+    } catch (error) {
+      audioUrlCache.delete(cacheKey);
+      throw error;
+    }
+  },
 };
 
 export const phraseListsApi = {
@@ -184,9 +199,12 @@ export const translateApi = {
 };
 
 // Audio playback utilities
-export const playAudio = (audioUrl: string): Promise<void> => {
+const audioUrlCache = new Map<string, Promise<string>>();
+
+export const playAudio = (audioUrl: string, playbackRate = 1): Promise<void> => {
   return new Promise((resolve, reject) => {
     const audio = new Audio(audioUrl);
+    audio.playbackRate = playbackRate;
     
     audio.onended = () => resolve();
     audio.onerror = () => reject(new Error('Failed to play audio'));

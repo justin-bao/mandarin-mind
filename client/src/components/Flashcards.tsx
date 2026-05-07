@@ -427,7 +427,7 @@ function SetupScreen({ onStart }: SetupProps) {
             <Card>
               <CardContent className="py-8 text-center text-sm text-muted-foreground">
                 <List className="h-8 w-8 mx-auto mb-2 opacity-40" />
-                No phrase lists yet. Create some in the Practice tab first.
+                No phrase lists yet. Create some in My Phrases first.
               </CardContent>
             </Card>
           ) : (
@@ -725,7 +725,7 @@ function AddToPhraseListControl({
   if (lists.length === 0) {
     return (
       <p className="text-xs text-muted-foreground">
-        Create a phrase list in Practice to save this card.
+        Create a phrase list in My Phrases to save this card.
       </p>
     );
   }
