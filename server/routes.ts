@@ -19,6 +19,7 @@ import {
   insertFlashcardSessionCardSchema,
 } from "../shared/schema.js";
 import { z } from "zod";
+import { posthog } from "./posthog.js";
 
 // ─── Uploads directory ────────────────────────────────────────────────────────
 const UPLOADS_DIR =
@@ -121,6 +122,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertConversationSchema.parse({ ...req.body, userId: req.user!.id });
       const conversation = await storage.createConversation(validatedData);
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "conversation created",
+        properties: {
+          conversation_id: conversation.id,
+          topic: conversation.topic ?? null,
+          difficulty: conversation.difficulty ?? null,
+        },
+      });
       res.json(conversation);
     } catch (error) {
       console.error("Error creating conversation:", error);
@@ -212,6 +222,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         audioUrl: `data:audio/mp3;base64,${audioBase64}`,
       });
 
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "conversation audio message sent",
+        properties: {
+          conversation_id: conversationId,
+          topic: conversation.topic ?? null,
+          difficulty: conversation.difficulty ?? null,
+        },
+      });
+
       res.json({ userMessage, aiMessage });
     } catch (error) {
       if (error instanceof AiUsageBudgetExceededError) return sendAiUsageError(res);
@@ -234,6 +254,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertPracticeWordSchema.parse({ ...req.body, userId: req.user!.id });
       const word = await storage.createPracticeWord(validatedData);
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "practice word added",
+        properties: {
+          word_id: word.id,
+          chinese: word.chinese,
+        },
+      });
       res.json(word);
     } catch (error) {
       res.status(400).json({ error: "Failed to create practice word" });
@@ -243,6 +271,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/practice-words/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       await storage.deletePracticeWord(req.params.id, req.user!.id);
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "practice word deleted",
+        properties: { word_id: req.params.id },
+      });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete practice word" });
@@ -269,6 +302,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const validatedData = insertPhraseListSchema.parse({ ...req.body, userId: req.user!.id });
       const list = await storage.createPhraseList(validatedData);
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "phrase list created",
+        properties: {
+          list_id: list.id,
+          name: list.name,
+        },
+      });
       res.json(list);
     } catch (error) {
       res.status(400).json({ error: "Failed to create phrase list" });
@@ -298,6 +339,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete("/api/phrase-lists/:id", requireAuth, async (req: Request, res: Response) => {
     try {
       await storage.deletePhraseList(req.params.id, req.user!.id);
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "phrase list deleted",
+        properties: { list_id: req.params.id },
+      });
       res.json({ success: true });
     } catch (error) {
       res.status(500).json({ error: "Failed to delete phrase list" });
@@ -322,6 +368,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!list) return res.status(404).json({ error: "Phrase list not found" });
       const validatedData = insertPhraseListItemSchema.parse({ ...req.body, listId: req.params.id });
       const item = await storage.createPhraseListItem(validatedData);
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "phrase list item added",
+        properties: {
+          list_id: req.params.id,
+          item_id: item.id,
+          chinese: item.chinese,
+        },
+      });
       res.json(item);
     } catch (error) {
       res.status(400).json({ error: "Failed to create phrase list item" });
@@ -387,6 +442,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
       );
 
       const session = await storage.createFlashcardSession(validatedSession, cards);
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "flashcard session started",
+        properties: {
+          session_id: session.id,
+          card_count: cards.length,
+        },
+      });
       res.json(session);
     } catch (error) {
       console.error("Error creating flashcard session:", error);
@@ -416,6 +479,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.patch("/api/flashcard-sessions/:id/complete", requireAuth, async (req: Request, res: Response) => {
     try {
       const session = await storage.completeFlashcardSession(req.params.id, req.user!.id);
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "flashcard session completed",
+        properties: { session_id: session.id },
+      });
       res.json(session);
     } catch (error) {
       console.error("Error completing flashcard session:", error);
@@ -429,6 +497,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { chinese, english } = req.body;
       if (!chinese || !english) return res.status(400).json({ error: "chinese and english are required" });
       const result = await mandarinTutorService.generateExampleSentence(chinese.trim(), english.trim(), req.user!.id);
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "example sentence generated",
+        properties: { chinese: chinese.trim(), english: english.trim() },
+      });
       res.json(result);
     } catch (error) {
       if (error instanceof AiUsageBudgetExceededError) return sendAiUsageError(res);
@@ -442,6 +515,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!text || typeof text !== "string") return res.status(400).json({ error: "text is required" });
       const dir = direction === "en-zh" ? "en-zh" : "zh-en";
       const result = await translateSentence(text.trim(), dir);
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "sentence translated",
+        properties: { direction: dir },
+      });
       res.json(result);
     } catch (error) {
       res.status(500).json({ error: "Failed to translate sentence" });
@@ -546,6 +624,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         captions: null,
       });
 
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "media image uploaded",
+        properties: {
+          item_id: item.id,
+          mime_type: req.file.mimetype,
+          ocr_block_count: Array.isArray(ocrBlocks) ? ocrBlocks.length : 0,
+        },
+      });
+
       sendSSE(res, "complete", { item });
     } catch (error) {
       console.error("Image upload/OCR error:", error);
@@ -606,6 +694,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
         fileUrl,
         ocrBlocks: null,
         captions: captions ?? null,
+      });
+
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "media video uploaded",
+        properties: {
+          item_id: item.id,
+          media_type: isVideo ? "video" : "audio",
+          mime_type: req.file.mimetype,
+        },
       });
 
       sendSSE(res, "complete", { item });

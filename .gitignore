@@ -7,3 +7,4 @@ vite.config.ts.*
 .vercel
 .env*.local
 .env.local copy
+.env.local

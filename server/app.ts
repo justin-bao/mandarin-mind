@@ -4,6 +4,7 @@ import { log } from "./log.js";
 import { storage } from "./storage.js";
 import { supabaseServer } from "./supabase.js";
 import type { User as AppUser } from "../shared/schema.js";
+import { posthog } from "./posthog.js";
 
 declare global {
   namespace Express {
@@ -52,6 +53,10 @@ async function attachSupabaseUser(req: Request, _res: Response, next: NextFuncti
       id: data.user.id,
       email: data.user.email.toLowerCase().trim(),
     });
+    posthog.identify({
+      distinctId: req.user.id,
+      properties: { email: req.user.email },
+    });
     next();
   } catch (error) {
     next(error);
@@ -99,10 +104,11 @@ export async function createApp() {
 
   const server = await registerRoutes(app);
 
-  app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
+  app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
     console.error(err);
+    posthog.captureException(err, req.user?.id);
     res.status(status).json({ message });
   });
 

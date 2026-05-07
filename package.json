@@ -66,6 +66,7 @@
     "openai": "^5.21.0",
     "pg": "^8.20.0",
     "pinyin-pro": "^3.28.0",
+    "posthog-node": "^5.21.2",
     "react": "^18.3.1",
     "react-day-picker": "^8.10.1",
     "react-dom": "^18.3.1",

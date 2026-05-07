@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
-import { Languages } from "lucide-react";
+import { Languages, Loader2 } from "lucide-react";
 import { FaGoogle } from "react-icons/fa";
 
 export default function AuthPage() {
@@ -160,11 +160,18 @@ export default function AuthPage() {
                 </div>
                 <Button
                   type="submit"
-                  className="w-full"
+                  className="w-full gap-2"
                   disabled={loginMutation.isPending}
                   data-testid="button-login"
                 >
-                  {loginMutation.isPending ? "Signing in…" : "Sign In"}
+                  {loginMutation.isPending ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" aria-hidden="true" />
+                      Signing in…
+                    </>
+                  ) : (
+                    "Sign In"
+                  )}
                 </Button>
               </form>
             </TabsContent>
