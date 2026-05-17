@@ -94,21 +94,6 @@ export const audioApi = {
     const res = await apiRequest('POST', '/api/audio/generate', { text });
     return await res.json();
   },
-  generateCached: async (text: string): Promise<{ audioUrl: string; cached: boolean }> => {
-    const cacheKey = text.trim();
-    const cached = audioUrlCache.get(cacheKey);
-    if (cached) return { audioUrl: await cached, cached: true };
-
-    const request = audioApi.generate(cacheKey).then(({ audioUrl }) => audioUrl);
-    audioUrlCache.set(cacheKey, request);
-
-    try {
-      return { audioUrl: await request, cached: false };
-    } catch (error) {
-      audioUrlCache.delete(cacheKey);
-      throw error;
-    }
-  },
 };
 
 export const phraseListsApi = {
@@ -199,8 +184,6 @@ export const translateApi = {
 };
 
 // Audio playback utilities
-const audioUrlCache = new Map<string, Promise<string>>();
-
 export const playAudio = (audioUrl: string, playbackRate = 1): Promise<void> => {
   return new Promise((resolve, reject) => {
     const audio = new Audio(audioUrl);
@@ -210,5 +193,47 @@ export const playAudio = (audioUrl: string, playbackRate = 1): Promise<void> => 
     audio.onerror = () => reject(new Error('Failed to play audio'));
     
     audio.play().catch(reject);
+  });
+};
+
+let speechVoices: SpeechSynthesisVoice[] = [];
+
+function getMandarinVoice(): SpeechSynthesisVoice | undefined {
+  if (!("speechSynthesis" in window)) return undefined;
+
+  speechVoices = window.speechSynthesis.getVoices();
+  return (
+    speechVoices.find((voice) => voice.lang.toLowerCase().startsWith("zh-cn")) ??
+    speechVoices.find((voice) => voice.lang.toLowerCase().startsWith("zh")) ??
+    speechVoices.find((voice) => /chinese|mandarin/i.test(voice.name))
+  );
+}
+
+export const speakMandarinText = (text: string, rate = 1.15): Promise<void> => {
+  return new Promise((resolve, reject) => {
+    if (!("speechSynthesis" in window) || typeof SpeechSynthesisUtterance === "undefined") {
+      reject(new Error("Speech synthesis is not supported in this browser"));
+      return;
+    }
+
+    const trimmed = text.trim();
+    if (!trimmed) {
+      resolve();
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(trimmed);
+    utterance.lang = "zh-CN";
+    utterance.rate = rate;
+
+    const voice = getMandarinVoice();
+    if (voice) utterance.voice = voice;
+
+    utterance.onend = () => resolve();
+    utterance.onerror = () => reject(new Error("Failed to play speech"));
+
+    window.speechSynthesis.speak(utterance);
   });
 };

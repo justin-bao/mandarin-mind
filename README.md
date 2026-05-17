@@ -13,6 +13,7 @@ MandarinMind is a full-stack Mandarin learning app for speech practice, phrase s
 - Image OCR for Chinese and English text using Tesseract.js
 - Video/audio upload with timestamped bilingual captions using Groq Whisper and OpenAI translation
 - Light/dark theme support and responsive desktop/mobile navigation
+- Chinese keyboard assistant API for pinyin cleanup, character correction, grammar suggestions, and tone/authenticity feedback
 
 ## Tech Stack
 
@@ -85,6 +86,28 @@ Open `http://localhost:5000`.
 
 In development, Express serves the API and Vite middleware serves the React client from the same server.
 
+### Run the Mobile Apps
+
+The Expo mobile client lives in [mobile](/Users/Justin/personal_projects/mandarin-mind/mobile). It supports iOS and Android while using the same Supabase Auth project and the same Express API backend.
+
+```bash
+cd mobile
+npm install
+cp .env.example .env
+npm run ios
+```
+
+For Android:
+
+```bash
+cd mobile
+npm install
+cp .env.example .env
+npm run android
+```
+
+Set `EXPO_PUBLIC_API_BASE_URL`, `EXPO_PUBLIC_SUPABASE_URL`, and `EXPO_PUBLIC_SUPABASE_ANON_KEY` in `mobile/.env`. The iOS simulator can use `http://localhost:5000` for the API while the root `npm run dev` server is running. The Android emulator should use `http://10.0.2.2:5000`; physical devices should use your Mac's LAN URL.
+
 ## Deploying to Vercel
 
 This repo includes [vercel.json](/Users/Justin/personal_projects/mandarin-mind/vercel.json) and [api/index.ts](/Users/Justin/personal_projects/mandarin-mind/api/index.ts) so Vercel can deploy the Vite client as static assets and run the Express API as a Node.js serverless function.
@@ -123,6 +146,8 @@ npm run db:push  # Push Drizzle schema changes to the database
 client/                 React app
 client/src/components/  App features and shadcn/ui components
 client/src/data/        Local vocabulary data
+mobile/                 Expo React Native iOS and Android app
+keyboard/               iOS keyboard extension and desktop widget scaffolds
 server/                 Express server and integrations
 server/routes.ts        REST API routes
 server/openai.ts        OpenAI conversation, transcription, and TTS service
@@ -147,6 +172,7 @@ All data routes require authentication unless noted.
 - `POST /api/phrases/example-sentence`
 - `POST /api/translate/sentence`
 - `POST /api/audio/generate`
+- `POST /api/keyboard/analyze`
 - `GET /api/media`, `DELETE /api/media/:id`
 - `POST /api/media/upload/image`
 - `POST /api/media/upload/video`

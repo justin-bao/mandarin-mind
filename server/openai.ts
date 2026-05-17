@@ -22,6 +22,28 @@ export interface ConversationMessage {
   content: string;
 }
 
+export interface KeyboardTextIssue {
+  rangeText: string;
+  type: 'pinyin' | 'wrong-character' | 'grammar' | 'word-choice' | 'punctuation' | 'tone';
+  severity: 'info' | 'suggestion' | 'important';
+  message: string;
+  replacement?: string;
+}
+
+export interface KeyboardTextAnalysis {
+  originalText: string;
+  correctedText: string;
+  pinyin: string;
+  translation: string;
+  issues: KeyboardTextIssue[];
+  tone: {
+    label: 'local-casual' | 'neutral-natural' | 'formal' | 'awkward' | 'mixed';
+    summary: string;
+    authenticityScore: number;
+  };
+  suggestions: string[];
+}
+
 export class MandarinTutorService {
   async transcribeAudio(audioBuffer: Buffer): Promise<{ text: string; language: string }> {
     try {
@@ -209,6 +231,85 @@ ENGLISH: [natural English translation]`,
     } catch (error) {
       console.error('Example sentence generation error:', error);
       throw new Error('Failed to generate example sentence');
+    }
+  }
+
+  async analyzeKeyboardText(text: string, userId?: string): Promise<KeyboardTextAnalysis> {
+    if (userId) await storage.assertAiUsageWithinBudget(userId);
+    try {
+      const trimmed = text.trim();
+      const model = 'gpt-4o-mini';
+      const completion = await openai.chat.completions.create({
+        model,
+        messages: [
+          {
+            role: 'system',
+            content: `You are MandarinMind Keyboard, a Chinese writing assistant similar to Grammarly.
+Analyze short Chinese or mixed pinyin/Chinese text typed by a learner.
+
+You must:
+- Recognize pinyin typed where Chinese characters would be more natural.
+- Catch likely wrong characters, homophones, awkward word choice, grammar, punctuation, and register problems.
+- Suggest natural simplified Chinese.
+- Comment on tone/authenticity: local casual, neutral natural, formal, awkward, or mixed.
+- Prefer concise, practical comments suitable for a keyboard suggestion panel.
+
+Return only valid JSON matching this TypeScript type:
+{
+  "correctedText": string,
+  "pinyin": string,
+  "translation": string,
+  "issues": {
+    "rangeText": string,
+    "type": "pinyin" | "wrong-character" | "grammar" | "word-choice" | "punctuation" | "tone",
+    "severity": "info" | "suggestion" | "important",
+    "message": string,
+    "replacement"?: string
+  }[],
+  "tone": {
+    "label": "local-casual" | "neutral-natural" | "formal" | "awkward" | "mixed",
+    "summary": string,
+    "authenticityScore": number
+  },
+  "suggestions": string[]
+}`
+          },
+          {
+            role: 'user',
+            content: trimmed
+          }
+        ],
+        temperature: 0.2,
+        max_tokens: 700,
+        response_format: { type: 'json_object' },
+      });
+
+      await this.recordChatUsage(userId, {
+        feature: 'keyboard.analysis',
+        model,
+        inputTokens: completion.usage?.prompt_tokens ?? 0,
+        outputTokens: completion.usage?.completion_tokens ?? 0,
+      });
+
+      const raw = completion.choices[0]?.message?.content ?? '{}';
+      const parsed = JSON.parse(raw) as Partial<KeyboardTextAnalysis>;
+
+      return {
+        originalText: trimmed,
+        correctedText: typeof parsed.correctedText === 'string' ? parsed.correctedText : trimmed,
+        pinyin: typeof parsed.pinyin === 'string' ? parsed.pinyin : '',
+        translation: typeof parsed.translation === 'string' ? parsed.translation : '',
+        issues: Array.isArray(parsed.issues) ? parsed.issues.filter((issue) => issue && typeof issue.message === 'string') as KeyboardTextIssue[] : [],
+        tone: {
+          label: parsed.tone?.label ?? 'neutral-natural',
+          summary: parsed.tone?.summary ?? 'Naturalness looks okay, but no detailed tone note was returned.',
+          authenticityScore: Math.max(0, Math.min(100, Number(parsed.tone?.authenticityScore ?? 70))),
+        },
+        suggestions: Array.isArray(parsed.suggestions) ? parsed.suggestions.filter((item): item is string => typeof item === 'string') : [],
+      };
+    } catch (error) {
+      console.error('Keyboard analysis error:', error);
+      throw new Error('Failed to analyze keyboard text');
     }
   }
 

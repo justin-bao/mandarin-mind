@@ -53,6 +53,27 @@ vi.mock("./openai.js", () => ({
       pinyin: "wǒ xǐ huan hē chá.",
       translation: "I like drinking tea.",
     }),
+    analyzeKeyboardText: vi.fn().mockResolvedValue({
+      originalText: "wo xiang 去商店",
+      correctedText: "我想去商店。",
+      pinyin: "wǒ xiǎng qù shāng diàn.",
+      translation: "I want to go to the store.",
+      issues: [
+        {
+          rangeText: "wo xiang",
+          type: "pinyin",
+          severity: "important",
+          message: "Use Chinese characters here.",
+          replacement: "我想",
+        },
+      ],
+      tone: {
+        label: "neutral-natural",
+        summary: "Natural and casual.",
+        authenticityScore: 82,
+      },
+      suggestions: ["我想去商店。"],
+    }),
   },
 }));
 
@@ -180,6 +201,19 @@ describe("API route integration", () => {
       aiUsageBudgetUsdMicros: 0,
       aiUsageSpentUsdMicros: 0,
       createdAt: null,
+    });
+  });
+
+  it("analyzes Chinese keyboard text", async () => {
+    const res = await request(await buildApp(true))
+      .post("/api/keyboard/analyze")
+      .send({ text: "wo xiang 去商店" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.correctedText).toBe("我想去商店。");
+    expect(res.body.issues[0]).toMatchObject({
+      type: "pinyin",
+      replacement: "我想",
     });
   });
 

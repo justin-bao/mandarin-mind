@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
-import { phraseListsApi, phraseLookupApi, audioApi, playAudio } from "@/lib/api";
+import { phraseListsApi, phraseLookupApi, speakMandarinText } from "@/lib/api";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -607,21 +607,19 @@ function PhraseCard({
               <div className="text-sm text-foreground/80">{item.english}</div>
             </div>
             <div className="flex items-center gap-1 shrink-0">
-              <AiCreditTooltip disabled={isOutOfCredits}>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => onPlay(item.id, item.chinese)}
-                  disabled={playingId !== null || isOutOfCredits}
-                  title="Play pronunciation"
-                >
-                  {playingId === item.id ? (
-                    <Loader2 className="h-4 w-4 animate-spin" />
-                  ) : (
-                    <Volume2 className="h-4 w-4" />
-                  )}
-                </Button>
-              </AiCreditTooltip>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => onPlay(item.id, item.chinese)}
+                disabled={playingId !== null}
+                title="Play pronunciation"
+              >
+                {playingId === item.id ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Volume2 className="h-4 w-4" />
+                )}
+              </Button>
               <Button variant="ghost" size="icon" onClick={() => onDelete(item.id)} title="Remove phrase">
                 <Trash2 className="h-4 w-4" />
               </Button>
@@ -670,7 +668,7 @@ function PhraseCard({
                     key={i}
                     ex={ex}
                     isPlaying={playingId === `${item.id}:example:${i}`}
-                    disabled={(playingId !== null && playingId !== `${item.id}:example:${i}`) || isOutOfCredits}
+                    disabled={playingId !== null && playingId !== `${item.id}:example:${i}`}
                     onPlay={() => onPlay(`${item.id}:example:${i}`, ex.sentence)}
                     onSelectionChange={handleSelectionChange}
                   />
@@ -720,9 +718,7 @@ function ListDetail({ list, onBack, onStartPractice }: ListDetailProps) {
     if (playingId) return;
     setPlayingId(id);
     try {
-      const { audioUrl, cached } = await audioApi.generateCached(text);
-      if (!cached) refreshAiUsage();
-      await playAudio(audioUrl, 1.15);
+      await speakMandarinText(text, 1.15);
     } catch {
       toast({ description: "Failed to play audio", variant: "destructive" });
     } finally {

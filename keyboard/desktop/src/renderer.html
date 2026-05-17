@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MandarinMind Keyboard</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main>
+      <header>
+        <div class="brand-mark">文</div>
+        <div>
+          <h1>MandarinMind</h1>
+          <p>Chinese typing assistant</p>
+        </div>
+      </header>
+
+      <textarea id="input" placeholder="Type Chinese, mixed pinyin, or a draft sentence..."></textarea>
+
+      <div class="actions">
+        <button id="analyze">Analyze</button>
+        <button id="copy" class="secondary">Copy Correction</button>
+      </div>
+
+      <section id="result" class="panel muted">
+        Press Ctrl/Command+Shift+M to show or hide this widget.
+      </section>
+
+      <section>
+        <h2>Issues</h2>
+        <div id="issues" class="issue-list"></div>
+      </section>
+    </main>
+
+    <script src="./renderer.js"></script>
+  </body>
+</html>

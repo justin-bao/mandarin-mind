@@ -550,6 +550,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // ─── Keyboard assistant ──────────────────────────────────────────────────
+  app.post("/api/keyboard/analyze", requireAuth, async (req: Request, res: Response) => {
+    try {
+      const { text } = z.object({
+        text: z.string().trim().min(1).max(1000),
+      }).parse(req.body);
+
+      const result = await mandarinTutorService.analyzeKeyboardText(text, req.user!.id);
+      posthog.capture({
+        distinctId: req.user!.id,
+        event: "keyboard text analyzed",
+        properties: {
+          character_count: text.length,
+          issue_count: result.issues.length,
+          tone: result.tone.label,
+        },
+      });
+      res.json(result);
+    } catch (error) {
+      if (error instanceof AiUsageBudgetExceededError) return sendAiUsageError(res);
+      if (error instanceof z.ZodError) return res.status(400).json({ error: "Text is required and must be 1000 characters or fewer" });
+      res.status(500).json({ error: "Failed to analyze keyboard text" });
+    }
+  });
+
   // ─── Media: list + delete ─────────────────────────────────────────────────
   app.get("/api/media", requireAuth, async (req: Request, res: Response) => {
     try {

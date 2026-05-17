@@ -11,6 +11,7 @@ export type AiFeature =
   | "conversation.annotation"
   | "conversation.speech"
   | "phrase.example_sentence"
+  | "keyboard.analysis"
   | "media.transcription"
   | "media.translation";
 

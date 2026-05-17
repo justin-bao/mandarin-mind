@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "MandarinMind",
+    "slug": "mandarin-mind-mobile",
+    "scheme": "mandarinmind",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "assetBundlePatterns": ["**/*"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.mandarinmind.app",
+      "infoPlist": {
+        "NSMicrophoneUsageDescription": "MandarinMind uses the microphone so you can practice spoken Mandarin conversations."
+      }
+    },
+    "android": {
+      "package": "com.mandarinmind.app",
+      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"],
+      "adaptiveIcon": {
+        "backgroundColor": "#f6f7f9"
+      }
+    },
+    "plugins": [
+      [
+        "expo-av",
+        {
+          "microphonePermission": "MandarinMind uses the microphone so you can practice spoken Mandarin conversations."
+        }
+      ]
+    ]
+  }
+}
