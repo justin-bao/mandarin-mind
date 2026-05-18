@@ -24,7 +24,7 @@ interface NavigationTabsProps {
 const tabs: NavigationTab[] = [
   {
     id: 'conversation',
-    label: 'Conversation',
+    label: 'Talk',
     icon: <MessageCircle className="h-5 w-5" />
   },
   {

@@ -8,7 +8,10 @@ vite.config.ts.*
 .env*.local
 .env.local copy
 .env.local
+.tessdata-cache/
 mobile/.env
 mobile/.env.*
 !mobile/.env.example
+!mobile/.env.local.example
+!mobile/.env.production.example
 mobile/.expo/

@@ -60,6 +60,39 @@ export type FlashCard = {
   sourceListId?: string;
 };
 
+export type FlashcardSessionCard = FlashCard & {
+  id: string;
+  sessionId: string;
+  orderIndex: number;
+  status: "known" | "unknown" | "pending";
+  updatedAt: string;
+};
+
+export type FlashcardSession = {
+  id: string;
+  startedAt: string;
+  updatedAt: string;
+  completedAt?: string | null;
+  cards: FlashcardSessionCard[];
+};
+
+export type TranslationResult = {
+  tokens: { char: string; pinyin: string }[];
+  chinese: string;
+  translation: string;
+};
+
+export type MediaItem = {
+  id: string;
+  type: "image" | "video" | "audio";
+  originalName: string;
+  mimeType: string;
+  fileUrl: string;
+  ocrBlocks?: { text: string; pinyin?: string; translation?: string }[] | null;
+  captions?: { start?: number; end?: number; text: string; pinyin?: string; translation?: string }[] | null;
+  uploadedAt?: string | null;
+};
+
 export type KeyboardTextIssue = {
   rangeText: string;
   type: "pinyin" | "wrong-character" | "grammar" | "word-choice" | "punctuation" | "tone";

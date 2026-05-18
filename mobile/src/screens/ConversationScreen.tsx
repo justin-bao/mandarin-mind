@@ -249,10 +249,12 @@ export function ConversationScreen() {
       ) : (
         <View style={{ gap: 16 }}>
           <View style={{ flexDirection: "row", gap: 12 }}>
-            <Card style={{ flex: 1, gap: 8 }}>
-              <Text style={styles.h3}>Topic Conversation</Text>
-              <Text style={styles.muted}>Choose a guided prompt.</Text>
-            </Card>
+            <View style={{ flex: 1 }}>
+              <Card style={{ flex: 1, gap: 8 }}>
+                <Text style={styles.h3}>Topic Conversation</Text>
+                <Text style={styles.muted}>Choose a guided prompt.</Text>
+              </Card>
+            </View>
             <Pressable
               style={{ flex: 1 }}
               onPress={() => {

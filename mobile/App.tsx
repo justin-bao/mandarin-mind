@@ -13,6 +13,7 @@ import { FlashcardsScreen } from "./src/screens/FlashcardsScreen";
 import { PhrasesScreen } from "./src/screens/PhrasesScreen";
 import { SettingsScreen } from "./src/screens/SettingsScreen";
 import { GrammarScreen } from "./src/screens/GrammarScreen";
+import { MediaScreen } from "./src/screens/MediaScreen";
 import { BrandMark } from "./src/components/ui";
 import { colors, styles } from "./src/theme";
 
@@ -26,7 +27,7 @@ const queryClient = new QueryClient({
   }
 });
 
-type Tab = "conversation" | "phrases" | "grammar" | "flashcards" | "settings";
+type Tab = "conversation" | "phrases" | "grammar" | "flashcards" | "media" | "settings";
 
 function useCurrentUser() {
   return useQuery<AuthUser | null>({
@@ -77,7 +78,8 @@ function MainApp({ user }: { user: AuthUser }) {
         {activeTab === "conversation" ? <ConversationScreen /> : null}
         {activeTab === "phrases" ? <PhrasesScreen userId={user.id} /> : null}
         {activeTab === "grammar" ? <GrammarScreen /> : null}
-        {activeTab === "flashcards" ? <FlashcardsScreen /> : null}
+        {activeTab === "flashcards" ? <FlashcardsScreen userId={user.id} /> : null}
+        {activeTab === "media" ? <MediaScreen userId={user.id} /> : null}
         {activeTab === "settings" ? <SettingsScreen user={user} /> : null}
       </View>
 
@@ -87,6 +89,7 @@ function MainApp({ user }: { user: AuthUser }) {
           <TabButton tab="phrases" active={activeTab} icon="library-outline" label="Phrases" onPress={setActiveTab} />
           <TabButton tab="grammar" active={activeTab} icon="checkmark-circle-outline" label="Grammar" onPress={setActiveTab} />
           <TabButton tab="flashcards" active={activeTab} icon="albums-outline" label="Cards" onPress={setActiveTab} />
+          <TabButton tab="media" active={activeTab} icon="film-outline" label="Media" onPress={setActiveTab} />
           <TabButton tab="settings" active={activeTab} icon="settings-outline" label="Settings" onPress={setActiveTab} />
         </View>
       </SafeAreaView>

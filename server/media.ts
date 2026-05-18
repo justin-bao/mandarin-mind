@@ -25,8 +25,10 @@ interface TesseractWord {
 }
 
 interface TesseractLine {
-  words: TesseractWord[];
-  bbox: TesseractBbox;
+  words?: TesseractWord[];
+  text?: string;
+  confidence?: number;
+  bbox?: TesseractBbox;
 }
 
 interface TesseractParagraph {
@@ -35,13 +37,17 @@ interface TesseractParagraph {
 
 interface TesseractBlock {
   paragraphs: TesseractParagraph[];
-  bbox: TesseractBbox;
+  text?: string;
+  confidence?: number;
+  bbox?: TesseractBbox;
 }
 
 interface TesseractData {
-  blocks: TesseractBlock[];
-  width: number;
-  height: number;
+  blocks?: TesseractBlock[] | null;
+  text?: string;
+  confidence?: number;
+  width?: number;
+  height?: number;
 }
 
 // ─── Groq types ───────────────────────────────────────────────────────────────
@@ -61,59 +67,102 @@ interface GroqVerboseTranscription {
 
 // ─── OCR via Tesseract.js ─────────────────────────────────────────────────────
 
+const OCR_LANGUAGES = "chi_sim+eng";
+const OCR_CACHE_DIR = path.join(process.cwd(), ".tessdata-cache");
+
+function isRecoverableTesseractLanguageError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("traineddata") ||
+    message.includes("TESSDATA_PREFIX") ||
+    message.includes("Failed loading language") ||
+    message.includes("expected OCR data structure")
+  );
+}
+
+function mapTesseractData(data: unknown): OcrBlock[] {
+  const td = data as TesseractData;
+
+  if (typeof td !== "object" || td === null) {
+    throw new Error("Tesseract did not return expected OCR data structure");
+  }
+
+  const imgWidth = typeof td.width === "number" && td.width > 0 ? td.width : 800;
+  const imgHeight = typeof td.height === "number" && td.height > 0 ? td.height : 600;
+  const blocks: OcrBlock[] = [];
+
+  for (const block of Array.isArray(td.blocks) ? td.blocks : []) {
+    for (const para of block.paragraphs ?? []) {
+      for (const line of para.lines ?? []) {
+        const words = line.words ?? [];
+        const lineText = (line.text ?? words.map((w) => w.text).join(" ")).trim();
+        if (!lineText) continue;
+
+        const conf =
+          typeof line.confidence === "number"
+            ? line.confidence
+            : words.length
+              ? words.reduce((s, w) => s + (w.confidence ?? 0), 0) / words.length
+              : 100;
+
+        if (conf < 30) continue;
+
+        const bbox = line.bbox ?? block.bbox;
+        if (!bbox) continue;
+
+        blocks.push({
+          text: lineText,
+          x: (bbox.x0 / imgWidth) * 100,
+          y: (bbox.y0 / imgHeight) * 100,
+          width: ((bbox.x1 - bbox.x0) / imgWidth) * 100,
+          height: ((bbox.y1 - bbox.y0) / imgHeight) * 100,
+          confidence: Math.round(conf),
+        });
+      }
+    }
+  }
+
+  if (blocks.length === 0 && typeof td.text === "string" && td.text.trim()) {
+    blocks.push({
+      text: td.text.trim(),
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      confidence: Math.round(typeof td.confidence === "number" ? td.confidence : 0),
+    });
+  }
+
+  return blocks;
+}
+
 export async function runOCR(
   filePath: string,
   onProgress?: (step: "scanning" | "extracting") => void
 ): Promise<OcrBlock[]> {
   const Tesseract = await import("tesseract.js");
-  const worker = await Tesseract.createWorker(["chi_sim", "eng"]);
+
+  async function recognizeWithCache(cacheMethod: "write" | "refresh") {
+    fs.mkdirSync(OCR_CACHE_DIR, { recursive: true });
+    const worker = await Tesseract.createWorker(OCR_LANGUAGES, 1, {
+      cacheMethod,
+      cachePath: OCR_CACHE_DIR,
+    });
+    try {
+      onProgress?.("scanning");
+      const { data } = await worker.recognize(filePath, {}, { blocks: true });
+      onProgress?.("extracting");
+      return mapTesseractData(data);
+    } finally {
+      await worker.terminate();
+    }
+  }
 
   try {
-    onProgress?.("scanning");
-    const { data } = await worker.recognize(filePath);
-    onProgress?.("extracting");
-    const td = data as unknown as TesseractData;
-
-    // Runtime validation of OCR response shape before mapping
-    if (typeof td !== "object" || td === null || !Array.isArray(td.blocks)) {
-      throw new Error("Tesseract did not return expected OCR data structure");
-    }
-
-    const imgWidth = typeof td.width === "number" && td.width > 0 ? td.width : 800;
-    const imgHeight = typeof td.height === "number" && td.height > 0 ? td.height : 600;
-
-    const blocks: OcrBlock[] = [];
-
-    for (const block of td.blocks ?? []) {
-      for (const para of block.paragraphs ?? []) {
-        for (const line of para.lines ?? []) {
-          const words = line.words ?? [];
-          if (!words.length) continue;
-
-          const lineText = words.map((w) => w.text).join(" ").trim();
-          if (!lineText) continue;
-
-          const conf =
-            words.reduce((s, w) => s + (w.confidence ?? 0), 0) / words.length;
-
-          if (conf < 30) continue;
-
-          const bbox = line.bbox;
-          blocks.push({
-            text: lineText,
-            x: (bbox.x0 / imgWidth) * 100,
-            y: (bbox.y0 / imgHeight) * 100,
-            width: ((bbox.x1 - bbox.x0) / imgWidth) * 100,
-            height: ((bbox.y1 - bbox.y0) / imgHeight) * 100,
-            confidence: Math.round(conf),
-          });
-        }
-      }
-    }
-
-    return blocks;
-  } finally {
-    await worker.terminate();
+    return await recognizeWithCache("refresh");
+  } catch (error) {
+    if (!isRecoverableTesseractLanguageError(error)) throw error;
+    return recognizeWithCache("refresh");
   }
 }
 

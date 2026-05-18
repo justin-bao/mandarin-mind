@@ -51,6 +51,10 @@ export function Button({
 }) {
   const isPrimary = variant === "primary";
   const isDanger = variant === "danger";
+  const isTextOnly =
+    typeof children === "string" ||
+    typeof children === "number" ||
+    (Array.isArray(children) && children.every((child) => typeof child === "string" || typeof child === "number"));
   return (
     <Pressable
       {...props}
@@ -73,7 +77,7 @@ export function Button({
       ]}
     >
       {loading ? <ActivityIndicator color={isPrimary || isDanger ? colors.white : colors.foreground} /> : null}
-      {typeof children === "string" ? (
+      {isTextOnly ? (
         <Text
           style={[
             {
@@ -94,7 +98,8 @@ export function Button({
 }
 
 export function Field(props: TextInputProps) {
-  return <TextInput placeholderTextColor={colors.mutedForeground} style={[styles.input, props.style]} autoCapitalize="none" {...props} />;
+  const { style, ...rest } = props;
+  return <TextInput {...rest} placeholderTextColor={colors.mutedForeground} style={[styles.input, style]} autoCapitalize="none" />;
 }
 
 export function Badge({ children, tone = "neutral" }: { children: ReactNode; tone?: "neutral" | "primary" | "success" | "warning" | "danger" }) {

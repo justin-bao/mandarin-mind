@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Alert, ScrollView, Text, View } from "react-native";
+import { Alert, KeyboardAvoidingView, Platform, ScrollView, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation } from "@tanstack/react-query";
 import { grammarApi } from "../lib/api";
@@ -27,32 +27,39 @@ export function GrammarScreen() {
   const result = analysis.data;
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.page}>
-      <View>
-        <Text style={styles.title}>Grammar</Text>
-        <Text style={styles.muted}>Check Chinese characters, grammar, and how natural the wording sounds.</Text>
-      </View>
+    <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === "ios" ? "padding" : undefined}>
+      <ScrollView
+        style={styles.screen}
+        contentContainerStyle={[styles.page, { paddingBottom: 32 }]}
+        automaticallyAdjustKeyboardInsets
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="interactive"
+      >
+        <View>
+          <Text style={styles.title}>Grammar</Text>
+          <Text style={styles.muted}>Check Chinese characters, grammar, and how natural the wording sounds.</Text>
+        </View>
 
-      <Card style={{ gap: 10 }}>
-        <Text style={styles.h3}>Draft</Text>
-        <Field
-          value={text}
-          onChangeText={setText}
-          placeholder="Type Chinese or mixed pinyin here..."
-          multiline
-          textAlignVertical="top"
-          style={{ minHeight: 140, paddingTop: 12 }}
-        />
-        <Button loading={analysis.isPending} disabled={!text.trim()} onPress={() => analysis.mutate()}>
-          <Ionicons name="checkmark-circle-outline" size={20} color={colors.white} />
-          <Text style={{ color: colors.white, fontWeight: "700" }}>Analyze Grammar</Text>
-        </Button>
-      </Card>
+        <Card style={{ gap: 10 }}>
+          <Text style={styles.h3}>Draft</Text>
+          <Field
+            value={text}
+            onChangeText={setText}
+            placeholder="Type Chinese or mixed pinyin here..."
+            multiline
+            textAlignVertical="top"
+            style={{ minHeight: 140, paddingTop: 12, paddingBottom: 12, backgroundColor: colors.white }}
+          />
+          <Button loading={analysis.isPending} disabled={!text.trim()} onPress={() => analysis.mutate()}>
+            <Ionicons name="checkmark-circle-outline" size={20} color={colors.white} />
+            <Text style={{ color: colors.white, fontWeight: "700" }}>Analyze Grammar</Text>
+          </Button>
+        </Card>
 
-      {!result ? (
-        <EmptyState title="No analysis yet" body="Submit a sentence to see corrections, grammar notes, and tone feedback." />
-      ) : (
-        <>
+        {!result ? (
+          <EmptyState title="No analysis yet" body="Submit a sentence to see corrections, grammar notes, and tone feedback." />
+        ) : (
+          <>
           <Card style={{ gap: 8 }}>
             <Text style={styles.h3}>Suggested Revision</Text>
             <Text style={{ color: colors.foreground, fontSize: 24, lineHeight: 32, fontWeight: "700" }}>{result.correctedText}</Text>
@@ -95,8 +102,9 @@ export function GrammarScreen() {
               ))}
             </Card>
           ) : null}
-        </>
-      )}
-    </ScrollView>
+          </>
+        )}
+      </ScrollView>
+    </KeyboardAvoidingView>
   );
 }

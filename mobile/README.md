@@ -7,39 +7,72 @@ This is the Expo React Native mobile client for MandarinMind. It supports iOS an
 ```bash
 cd mobile
 npm install
-cp .env.example .env
 ```
 
-Set:
+Create your real local and production env files from the committed examples:
 
 ```bash
-EXPO_PUBLIC_API_BASE_URL=http://localhost:5000
-EXPO_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
-EXPO_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_or_publishable_key
+cp .env.local.example .env.localdev
+cp .env.production.example .env.production
 ```
 
-For the iOS simulator, `http://localhost:5000` reaches the dev server on your Mac. For the Android emulator, use `http://10.0.2.2:5000`. For a physical iPhone or Android phone, use your Mac's LAN URL, for example `http://192.168.1.20:5000`.
+Edit `.env.localdev` and `.env.production` with real values. The npm scripts below copy the selected source into `.env.local`, which Expo reads as the active mobile configuration.
+
+The files only contain `EXPO_PUBLIC_*` values, so they are safe client-side values, but `.env.local` is still ignored to avoid accidental machine-specific churn.
+
+For a local backend:
+- iOS simulator: `http://localhost:5000`
+- Android emulator: `http://10.0.2.2:5000`
+- Physical phone: your Mac LAN URL, for example `http://192.168.1.20:5000`
+
+For the deployed backend, use the stable Vercel production origin, for example `https://your-production-domain.vercel.app`, without `/api`.
 
 ## Run
 
-Start the existing backend from the repo root:
+To run against the local backend, start the existing backend from the repo root:
 
 ```bash
 npm run dev
 ```
 
-Then start the iOS app:
+Then from `mobile/` run:
 
 ```bash
-cd mobile
-npm run ios
+npm run ios:local
 ```
 
-Or start the Android app:
+For a physical iPhone against your local Mac backend:
 
 ```bash
-cd mobile
-npm run android
+npm run ios:local:device
+```
+
+For Android against the local backend:
+
+```bash
+npm run android:local
+```
+
+To run against the deployed backend:
+
+```bash
+npm run ios:prod
+npm run android:prod
+```
+
+For a standalone release build installed directly onto a physical iPhone:
+
+```bash
+npm run ios:prod:device
+```
+
+`ios:prod` and `ios:prod:device` build with the iOS `Release` configuration, so the app bundles its JavaScript and does not require Metro after installation. `ios:local` remains a faster debug build for normal development.
+
+To start Metro without immediately building native code:
+
+```bash
+npm run start:local
+npm run start:prod
 ```
 
 ## Included Mobile Flows
@@ -54,7 +87,7 @@ npm run android
 - Offline phrase-list cache for existing account data, with queued item sync after reconnect
 - Offline creation of new phrase lists, including phrase additions before the list receives its server ID
 - Offline exact-match dictionary lookup and translation for common phrases when adding new entries
-
-The bundled offline dictionary is intentionally small and exact-match based. General offline translation for arbitrary new phrases would require a substantially larger dictionary bundle or an on-device translation model.
 - Starter flashcards with session creation against the backend
 - Settings with account, AI usage, API base URL, and sign out
+
+The bundled offline dictionary is intentionally small and exact-match based. General offline translation for arbitrary new phrases would require a substantially larger dictionary bundle or an on-device translation model.

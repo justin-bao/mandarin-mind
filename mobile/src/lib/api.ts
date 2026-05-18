@@ -1,6 +1,6 @@
 import { Audio } from "expo-av";
 import { getAuthHeaders } from "./supabase";
-import type { Conversation, FlashCard, KeyboardTextAnalysis, Message, PhraseList, PhraseListItem } from "../types";
+import type { Conversation, FlashCard, FlashcardSession, KeyboardTextAnalysis, MediaItem, Message, PhraseList, PhraseListItem, TranslationResult } from "../types";
 
 const rawBaseUrl = process.env.EXPO_PUBLIC_API_BASE_URL ?? "http://localhost:5000";
 export const API_BASE_URL = rawBaseUrl.replace(/\/$/, "");
@@ -56,7 +56,11 @@ export const phraseListsApi = {
   create: (data: { name: string; description?: string }) => apiRequest<PhraseList>("POST", "/api/phrase-lists", data),
   getItems: (listId: string) => apiRequest<PhraseListItem[]>("GET", `/api/phrase-lists/${listId}/items`),
   addItem: (listId: string, data: { chinese: string; pinyin?: string; english: string }) =>
-    apiRequest<PhraseListItem>("POST", `/api/phrase-lists/${listId}/items`, data)
+    apiRequest<PhraseListItem>("POST", `/api/phrase-lists/${listId}/items`, data),
+  updateItem: (listId: string, itemId: string, data: { chinese: string; pinyin?: string; english: string }) =>
+    apiRequest<PhraseListItem>("PATCH", `/api/phrase-lists/${listId}/items/${itemId}`, data),
+  deleteItem: (listId: string, itemId: string) =>
+    apiRequest<{ success: boolean }>("DELETE", `/api/phrase-lists/${listId}/items/${itemId}`)
 };
 
 export const phraseLookupApi = {
@@ -64,11 +68,83 @@ export const phraseLookupApi = {
 };
 
 export const flashcardSessionsApi = {
-  create: (cards: FlashCard[]) => apiRequest<{ id: string }>("POST", "/api/flashcard-sessions", { cards })
+  getAll: () => apiRequest<FlashcardSession[]>("GET", "/api/flashcard-sessions"),
+  create: (cards: FlashCard[]) => apiRequest<FlashcardSession>("POST", "/api/flashcard-sessions", { cards }),
+  updateCardStatus: (sessionId: string, cardId: string, status: "known" | "unknown" | "pending") =>
+    apiRequest<FlashcardSession["cards"][number]>("PATCH", `/api/flashcard-sessions/${sessionId}/cards/${cardId}`, { status }),
+  complete: (sessionId: string) => apiRequest<FlashcardSession>("PATCH", `/api/flashcard-sessions/${sessionId}/complete`)
 };
 
 export const grammarApi = {
   analyze: (text: string) => apiRequest<KeyboardTextAnalysis>("POST", "/api/keyboard/analyze", { text })
+};
+
+export const translateApi = {
+  sentence: (text: string, direction: "zh-en" | "en-zh") =>
+    apiRequest<TranslationResult>("POST", "/api/translate/sentence", { text, direction })
+};
+
+export const mediaApi = {
+  getAll: () => apiRequest<MediaItem[]>("GET", "/api/media"),
+  delete: (id: string) => apiRequest<{ success: boolean }>("DELETE", `/api/media/${id}`),
+  upload: async (
+    kind: "image" | "video",
+    file: { uri: string; name: string; type: string },
+    onEvent: (event: { type: "progress"; step: string; status: string } | { type: "complete"; item: MediaItem } | { type: "error"; message: string }) => void
+  ) => {
+    const authHeaders = await getAuthHeaders();
+    const formData = new FormData();
+    formData.append("file", file as unknown as Blob);
+
+    return new Promise<MediaItem>((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      let consumedLength = 0;
+      let buffer = "";
+      let settled = false;
+
+      function consumeEvents() {
+        const next = xhr.responseText.slice(consumedLength);
+        consumedLength = xhr.responseText.length;
+        buffer += next;
+        const chunks = buffer.split("\n\n");
+        buffer = chunks.pop() ?? "";
+        for (const chunk of chunks) {
+          const lines = chunk.split("\n");
+          const event = lines.find((line) => line.startsWith("event: "))?.slice(7).trim();
+          const data = lines.find((line) => line.startsWith("data: "))?.slice(6);
+          if (!event || !data) continue;
+          try {
+            const payload = JSON.parse(data);
+            if (event === "progress") onEvent({ type: "progress", step: payload.step, status: payload.status });
+            if (event === "complete") {
+              onEvent({ type: "complete", item: payload.item });
+              settled = true;
+              resolve(payload.item);
+            }
+            if (event === "error") {
+              const message = payload.message ?? "Upload failed";
+              onEvent({ type: "error", message });
+              settled = true;
+              reject(new Error(message));
+            }
+          } catch {
+            // Ignore malformed/incomplete SSE chunks.
+          }
+        }
+      }
+
+      xhr.onreadystatechange = consumeEvents;
+      xhr.onprogress = consumeEvents;
+      xhr.onerror = () => reject(new Error("Network error during upload"));
+      xhr.onloadend = () => {
+        consumeEvents();
+        if (!settled && xhr.status >= 400) reject(new Error(`Upload failed (${xhr.status})`));
+      };
+      xhr.open("POST", `${API_BASE_URL}/api/media/upload/${kind}`);
+      Object.entries(authHeaders).forEach(([key, value]) => xhr.setRequestHeader(key, value));
+      xhr.send(formData);
+    });
+  }
 };
 
 export async function playAudioUrl(uri: string) {

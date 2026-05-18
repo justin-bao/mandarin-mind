@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Alert, Text, View } from "react-native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "../lib/supabase";
@@ -12,18 +13,27 @@ function formatUsd(micros?: number) {
 
 export function SettingsScreen({ user }: { user: AuthUser }) {
   const queryClient = useQueryClient();
+  const [isSigningOut, setIsSigningOut] = useState(false);
   const usage = useQuery({
     queryKey: ["mobile", "usage", "ai"],
     queryFn: () => apiRequest<{ budgetUsdMicros?: number; spentUsdMicros?: number }>("GET", "/api/usage/ai")
   });
 
   async function signOut() {
-    const { error } = await supabase.auth.signOut();
-    if (error) {
-      Alert.alert("Sign out failed", error.message);
-      return;
+    setIsSigningOut(true);
+    try {
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      if (error) {
+        Alert.alert("Sign out failed", error.message);
+        return;
+      }
+      queryClient.setQueryData(["/api/auth/me"], null);
+      queryClient.removeQueries({
+        predicate: (query) => JSON.stringify(query.queryKey) !== JSON.stringify(["/api/auth/me"])
+      });
+    } finally {
+      setIsSigningOut(false);
     }
-    queryClient.clear();
   }
 
   return (
@@ -50,7 +60,7 @@ export function SettingsScreen({ user }: { user: AuthUser }) {
         <Text style={styles.muted}>{API_BASE_URL}</Text>
       </Card>
 
-      <Button variant="danger" onPress={signOut}>Sign Out</Button>
+      <Button variant="danger" loading={isSigningOut} onPress={signOut}>Sign Out</Button>
     </View>
   );
 }

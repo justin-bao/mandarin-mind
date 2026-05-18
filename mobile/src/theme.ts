@@ -73,6 +73,7 @@ export const styles = StyleSheet.create({
     borderRadius: radius.md,
     backgroundColor: colors.white,
     paddingHorizontal: 12,
+    paddingVertical: 12,
     color: colors.foreground,
     fontSize: 16
   }

@@ -47,6 +47,12 @@
     </dict>
     <key>NSMicrophoneUsageDescription</key>
     <string>MandarinMind uses the microphone so you can practice spoken Mandarin conversations.</string>
+    <key>NSCameraUsageDescription</key>
+    <string>MandarinMind uses your camera so you can capture images for Chinese text extraction.</string>
+    <key>NSPhotoLibraryUsageDescription</key>
+    <string>MandarinMind uses your photos so you can upload images for Chinese text extraction.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>MandarinMind uses your local network to connect to the development server while you test the app.</string>
     <key>UILaunchStoryboardName</key>
     <string>SplashScreen</string>
     <key>UIRequiredDeviceCapabilities</key>

@@ -12,7 +12,7 @@ import {
 import { MessageCircle, GraduationCap, Settings, Layers, Film, Languages, CheckCircle2 } from "lucide-react";
 
 const navItems = [
-  { id: "conversation", label: "Conversation", icon: MessageCircle },
+  { id: "conversation", label: "Talk", icon: MessageCircle },
   { id: "practice", label: "My Phrases", icon: GraduationCap },
   { id: "grammar", label: "Grammar", icon: CheckCircle2 },
   { id: "flashcards", label: "Flashcards", icon: Layers },

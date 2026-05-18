@@ -134,6 +134,40 @@ export async function addPhraseItemOfflineFirst(
   }
 }
 
+export async function updatePhraseItemOfflineFirst(
+  userId: string,
+  listId: string,
+  itemId: string,
+  item: { chinese: string; pinyin?: string; english: string }
+) {
+  if (isPendingId(itemId)) {
+    const queue = await getQueuedAdds(userId);
+    await setQueuedAdds(userId, queue.map((entry) => entry.id === itemId ? { ...entry, item } : entry));
+    const current = await getCachedPhraseItems(userId, listId);
+    const updated = current.map((entry) => entry.id === itemId ? { ...entry, ...item, pinyin: item.pinyin ?? null } : entry);
+    await setCachedPhraseItems(userId, listId, updated);
+    return updated.find((entry) => entry.id === itemId)!;
+  }
+
+  const updated = await phraseListsApi.updateItem(listId, itemId, item);
+  const current = await getCachedPhraseItems(userId, listId);
+  await setCachedPhraseItems(userId, listId, current.map((entry) => entry.id === itemId ? updated : entry));
+  return updated;
+}
+
+export async function deletePhraseItemOfflineFirst(userId: string, listId: string, itemId: string) {
+  if (isPendingId(itemId)) {
+    const queue = await getQueuedAdds(userId);
+    await setQueuedAdds(userId, queue.filter((entry) => entry.id !== itemId));
+  } else {
+    await phraseListsApi.deleteItem(listId, itemId);
+  }
+
+  const current = await getCachedPhraseItems(userId, listId);
+  await setCachedPhraseItems(userId, listId, current.filter((entry) => entry.id !== itemId));
+  await incrementCachedListCount(userId, listId, -1);
+}
+
 export async function createPhraseListOfflineFirst(
   userId: string,
   list: { name: string; description?: string }
@@ -236,7 +270,7 @@ async function queuePhraseItem(
   const pending = toPendingItem(queued);
   const current = await getCachedPhraseItems(userId, listId);
   await setCachedPhraseItems(userId, listId, [...current, pending]);
-  await incrementCachedListCount(userId, listId);
+  await incrementCachedListCount(userId, listId, 1);
   return { item: pending, queued: true };
 }
 
@@ -256,11 +290,11 @@ async function replacePendingListId(userId: string, pendingId: string, created: 
   await setQueuedAdds(userId, migratedQueue);
 }
 
-async function incrementCachedListCount(userId: string, listId: string) {
+async function incrementCachedListCount(userId: string, listId: string, delta: number) {
   const lists = await getCachedPhraseLists(userId);
   await setCachedPhraseLists(
     userId,
-    lists.map((list) => list.id === listId ? { ...list, itemCount: (list.itemCount ?? 0) + 1 } : list)
+    lists.map((list) => list.id === listId ? { ...list, itemCount: Math.max(0, (list.itemCount ?? 0) + delta) } : list)
   );
 }
 

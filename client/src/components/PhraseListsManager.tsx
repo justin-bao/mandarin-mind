@@ -383,6 +383,74 @@ function AddPhraseDialog({ open, listId, onClose }: AddPhraseDialogProps) {
   );
 }
 
+function EditPhraseDialog({
+  open,
+  listId,
+  item,
+  onClose,
+}: {
+  open: boolean;
+  listId: string;
+  item: PhraseListItem | null;
+  onClose: () => void;
+}) {
+  const { toast } = useToast();
+  const [chinese, setChinese] = useState("");
+  const [pinyin, setPinyin] = useState("");
+  const [english, setEnglish] = useState("");
+
+  useEffect(() => {
+    setChinese(item?.chinese ?? "");
+    setPinyin(item?.pinyin ?? "");
+    setEnglish(item?.english ?? "");
+  }, [item]);
+
+  const updateMutation = useMutation({
+    mutationFn: () => phraseListsApi.updateItem(listId, item!.id, {
+      chinese: chinese.trim(),
+      pinyin: pinyin.trim() || undefined,
+      english: english.trim(),
+    }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/phrase-lists", listId, "items"] });
+      toast({ description: "Phrase updated" });
+      onClose();
+    },
+    onError: () => toast({ description: "Failed to update phrase", variant: "destructive" }),
+  });
+
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => { if (!nextOpen) onClose(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Edit Phrase</DialogTitle>
+        </DialogHeader>
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-chinese">Chinese Characters</Label>
+            <Input id="edit-chinese" value={chinese} onChange={(event) => setChinese(event.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-pinyin">Pinyin</Label>
+            <Input id="edit-pinyin" value={pinyin} onChange={(event) => setPinyin(event.target.value)} className="italic" />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-english">English Translation</Label>
+            <Input id="edit-english" value={english} onChange={(event) => setEnglish(event.target.value)} />
+          </div>
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={() => updateMutation.mutate()} disabled={!chinese.trim() || !english.trim() || updateMutation.isPending}>
+            {updateMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Save Changes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 // ─── Create / Edit List Dialog ────────────────────────────────────────────────
 interface ListFormDialogProps {
   open: boolean;
@@ -562,6 +630,7 @@ function PhraseCard({
   listId,
   playingId,
   onPlay,
+  onEdit,
   onDelete,
   isOutOfCredits,
   refreshAiUsage,
@@ -570,6 +639,7 @@ function PhraseCard({
   listId: string;
   playingId: string | null;
   onPlay: (id: string, text: string) => void;
+  onEdit: (item: PhraseListItem) => void;
   onDelete: (id: string) => void;
   isOutOfCredits: boolean;
   refreshAiUsage: () => void;
@@ -619,6 +689,9 @@ function PhraseCard({
                 ) : (
                   <Volume2 className="h-4 w-4" />
                 )}
+              </Button>
+              <Button variant="ghost" size="icon" onClick={() => onEdit(item)} title="Edit phrase">
+                <Pencil className="h-4 w-4" />
               </Button>
               <Button variant="ghost" size="icon" onClick={() => onDelete(item.id)} title="Remove phrase">
                 <Trash2 className="h-4 w-4" />
@@ -696,6 +769,7 @@ function ListDetail({ list, onBack, onStartPractice }: ListDetailProps) {
   const { isOutOfCredits, refreshAiUsage } = useAiUsage();
   const [addOpen, setAddOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
+  const [editingPhrase, setEditingPhrase] = useState<PhraseListItem | null>(null);
   const [deleteItemId, setDeleteItemId] = useState<string | null>(null);
   const [playingId, setPlayingId] = useState<string | null>(null);
 
@@ -793,6 +867,7 @@ function ListDetail({ list, onBack, onStartPractice }: ListDetailProps) {
               listId={list.id}
               playingId={playingId}
               onPlay={handlePlay}
+              onEdit={setEditingPhrase}
               onDelete={(id) => setDeleteItemId(id)}
               isOutOfCredits={isOutOfCredits}
               refreshAiUsage={refreshAiUsage}
@@ -803,6 +878,7 @@ function ListDetail({ list, onBack, onStartPractice }: ListDetailProps) {
 
       <AddPhraseDialog open={addOpen} listId={list.id} onClose={() => setAddOpen(false)} />
       <ListFormDialog open={editOpen} existing={list} onClose={() => setEditOpen(false)} />
+      <EditPhraseDialog open={!!editingPhrase} listId={list.id} item={editingPhrase} onClose={() => setEditingPhrase(null)} />
 
       <AlertDialog open={!!deleteItemId} onOpenChange={(o) => { if (!o) setDeleteItemId(null); }}>
         <AlertDialogContent>

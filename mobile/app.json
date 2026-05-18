@@ -6,18 +6,26 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "automatic",
-    "assetBundlePatterns": ["**/*"],
+    "icon": "./assets/icon.png",
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.mandarinmind.app",
       "infoPlist": {
-        "NSMicrophoneUsageDescription": "MandarinMind uses the microphone so you can practice spoken Mandarin conversations."
+        "NSMicrophoneUsageDescription": "MandarinMind uses the microphone so you can practice spoken Mandarin conversations.",
+        "NSLocalNetworkUsageDescription": "MandarinMind uses your local network to connect to the development server while you test the app."
       }
     },
     "android": {
       "package": "com.mandarinmind.app",
-      "permissions": ["RECORD_AUDIO", "MODIFY_AUDIO_SETTINGS"],
+      "permissions": [
+        "RECORD_AUDIO",
+        "MODIFY_AUDIO_SETTINGS"
+      ],
       "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
         "backgroundColor": "#f6f7f9"
       }
     },
@@ -27,7 +35,15 @@
         {
           "microphonePermission": "MandarinMind uses the microphone so you can practice spoken Mandarin conversations."
         }
-      ]
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "MandarinMind uses your photos so you can upload images for Chinese text extraction.",
+          "cameraPermission": "MandarinMind uses your camera so you can capture images for Chinese text extraction."
+        }
+      ],
+      "expo-asset"
     ]
   }
 }
