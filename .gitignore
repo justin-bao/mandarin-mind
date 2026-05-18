@@ -8,3 +8,7 @@ vite.config.ts.*
 .env*.local
 .env.local copy
 .env.local
+mobile/.env
+mobile/.env.*
+!mobile/.env.example
+mobile/.expo/

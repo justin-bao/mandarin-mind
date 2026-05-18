@@ -183,6 +183,35 @@ export const translateApi = {
   },
 };
 
+export type KeyboardTextIssue = {
+  rangeText: string;
+  type: 'pinyin' | 'wrong-character' | 'grammar' | 'word-choice' | 'punctuation' | 'tone';
+  severity: 'info' | 'suggestion' | 'important';
+  message: string;
+  replacement?: string;
+};
+
+export type KeyboardTextAnalysis = {
+  originalText: string;
+  correctedText: string;
+  pinyin: string;
+  translation: string;
+  issues: KeyboardTextIssue[];
+  tone: {
+    label: 'local-casual' | 'neutral-natural' | 'formal' | 'awkward' | 'mixed';
+    summary: string;
+    authenticityScore: number;
+  };
+  suggestions: string[];
+};
+
+export const grammarApi = {
+  analyze: async (text: string): Promise<KeyboardTextAnalysis> => {
+    const res = await apiRequest('POST', '/api/keyboard/analyze', { text });
+    return await res.json();
+  },
+};
+
 // Audio playback utilities
 export const playAudio = (audioUrl: string, playbackRate = 1): Promise<void> => {
   return new Promise((resolve, reject) => {

@@ -20,6 +20,7 @@ import Settings from "@/components/Settings";
 import ThemeToggle from "@/components/ThemeToggle";
 import Flashcards from "@/components/Flashcards";
 import MediaMode from "@/components/MediaMode";
+import GrammarChecker from "@/components/GrammarChecker";
 
 type AuthUser = {
   id: string;
@@ -227,6 +228,10 @@ function MainApp({ user }: { user: AuthUser }) {
           <Flashcards />
         </div>
       );
+    }
+
+    if (activeTab === "grammar") {
+      return <GrammarChecker />;
     }
 
     if (activeTab === "media") {
